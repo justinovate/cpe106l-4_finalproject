@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrar Staff Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light py-4">
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Registrar Priority Queue Monitor</h2>
+        <a href="/" class="btn btn-outline-secondary btn-sm">Student Form</a>
+    </div>
+
+    {% if top %}
+    <div class="card border-primary mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white font-weight-bold">Now Serving (Top Priority)</div>
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h4>#{{ top.ticket_id }} — {{ top.name }} ({{ top.standing_name }})</h4>
+                <p class="mb-0 text-muted"><strong>Request:</strong> {{ top.request_name }} | <strong>Score:</strong> {{ top.priority_score }}</p>
+            </div>
+            <form method="POST" action="/call-next">
+                <button type="submit" class="btn btn-success btn-lg">Call & Mark Served</button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">No active tickets waiting in queue.</div>
+    {% endif %}
+
+    <h4>Waiting Queue (Min-Heap Ordered)</h4>
+    <table class="table table-bordered table-striped bg-white shadow-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>Queue Pos</th>
+                <th>Ticket ID</th>
+                <th>Student Name</th>
+                <th>Academic Level</th>
+                <th>Request Type</th>
+                <th>Calculated Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tickets %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>#{{ t.ticket_id }}</td>
+                <td>{{ t.name }}</td>
+                <td>{{ t.standing_name }}</td>
+                <td>{{ t.request_name }}</td>
+                <td><span class="badge bg-secondary">{{ t.priority_score }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

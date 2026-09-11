@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrar Check-In</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light py-5">
+<div class="container" style="max-width: 600px;">
+    <div class="card shadow-sm p-4">
+        <h3 class="text-center text-primary mb-3">Registrar Smart Check-In</h3>
+        {% if success %}
+        <div class="alert alert-success">Ticket issued for {{ name }}! You are in the queue.</div>
+        {% endif %}
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Student ID Number</label>
+                <input type="text" name="student_id" class="form-control" placeholder="e.g. 2024101234" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Full Name</label>
+                <input type="text" name="full_name" class="form-control" placeholder="e.g. Juan Dela Cruz" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Request Type</label>
+                <select name="request_type" class="form-select" required>
+                    <option value="Graduation Clearance / Drop Deadline">Graduation Clearance / Drop Deadline (High Urgency)</option>
+                    <option value="Prerequisite Override / Grade Dispute">Prerequisite Override / Grade Dispute</option>
+                    <option value="Transcript (TOR) Pickup">Official Transcript (TOR) Pickup</option>
+                    <option value="Certificate of Enrollment / Inquiry">Certificate of Enrollment / General Inquiry</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Academic Year Level</label>
+                <select name="grade_level" class="form-select" required>
+                    <option value="Graduating Senior">Graduating Senior</option>
+                    <option value="Non-Graduating Senior">Senior</option>
+                    <option value="Junior">Junior</option>
+                    <option value="Sophomore">Sophomore</option>
+                    <option value="Freshman">Freshman</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Submit Check-In</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>
