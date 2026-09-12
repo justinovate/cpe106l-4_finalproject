@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapuaQ - Queue Volume & Priority Analytics</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-mapua-cardinal { background-color: #800000; }
+        .text-mapua-cardinal { color: #800000; }
+    </style>
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">MapuaQ <span class="badge bg-warning text-dark fs-6">Registrar Priority</span></a>
+        <div class="navbar-nav">
+            <a class="nav-link" href="/">Student Check-In</a>
+            <a class="nav-link" href="/dashboard">Queue Monitor</a>
+            <a class="nav-link active" href="/analytics">Analytics</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-mapua-cardinal mb-1">Queue Volume & Priority Analytics</h2>
+            <p class="text-muted mb-0">Visual analytics powered by Matplotlib</p>
+        </div>
+    </div>
+
+    <!-- Summary Metrics Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 bg-white p-3 text-center">
+                <h6 class="text-muted text-uppercase mb-1 fw-bold">Total Tickets Issued</h6>
+                <h2 class="display-6 fw-bold text-mapua-cardinal mb-0">{{ summary.total_tickets }}</h2>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 bg-white p-3 text-center">
+                <h6 class="text-muted text-uppercase mb-1 fw-bold">Active Waiting Tickets</h6>
+                <h2 class="display-6 fw-bold text-warning mb-0">{{ summary.waiting_tickets }}</h2>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 bg-white p-3 text-center">
+                <h6 class="text-muted text-uppercase mb-1 fw-bold">Served Tickets</h6>
+                <h2 class="display-6 fw-bold text-success mb-0">{{ summary.served_tickets }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Matplotlib Visualizations -->
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 p-3 bg-white">
+                <h5 class="fw-bold text-secondary mb-3">Queue Volume Breakdown</h5>
+                <img src="/api/analytics/volume.png" class="img-fluid rounded border" alt="Queue Volume Chart">
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 p-3 bg-white">
+                <h5 class="fw-bold text-secondary mb-3">Priority Score Distribution</h5>
+                <img src="/api/analytics/distribution.png" class="img-fluid rounded border" alt="Priority Score Distribution Chart">
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,11 +1,6 @@
-echo "venv/" > .gitignore
-echo "*.db" >> .gitignore
-echo "__pycache__/" >> .gitignore
-
-cat << 'EOF' > .gitignore
 venv/
 *.db
 __pycache__/
 */__pycache__/
 *.pyc
-EOF
+.pytest_cache/

@@ -32,7 +32,8 @@ class StudentTicket:
     """Represents an individual student ticket entity."""
     def __init__(self, ticket_id: int, student_id: str, name: str,
                  request_name: str, request_weight: int,
-                 standing_name: str, standing_weight: int):
+                 standing_name: str, standing_weight: int,
+                 arrival_timestamp: float = None):
         self.ticket_id = ticket_id
         self.student_id = student_id
         self.name = name
@@ -40,8 +41,12 @@ class StudentTicket:
         self.request_weight = request_weight
         self.standing_name = standing_name
         self.standing_weight = standing_weight
-        self.arrival_timestamp = time.time()
+        self.arrival_timestamp = arrival_timestamp if arrival_timestamp is not None else time.time()
         self.priority_score = 0.0
+
+    @property
+    def elapsed_minutes(self) -> float:
+        return max(0.0, round((time.time() - self.arrival_timestamp) / 60.0, 1))
 
     def update_score(self, strategy: PriorityCalculationStrategy):
         self.priority_score = strategy.calculate_score(
@@ -64,6 +69,12 @@ class RegistrarMinHeapQueue:
     def push(self, ticket: StudentTicket):
         ticket.update_score(self.strategy)
         heapq.heappush(self._heap, ticket)
+
+    def refresh_scores(self):
+        """Recalculate dynamic aging scores for all tickets and re-heapify."""
+        for ticket in self._heap:
+            ticket.update_score(self.strategy)
+        heapq.heapify(self._heap)
 
     def pop_highest_priority(self) -> StudentTicket:
         return heapq.heappop(self._heap) if self._heap else None

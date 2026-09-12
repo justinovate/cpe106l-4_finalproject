@@ -2,54 +2,87 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Registrar Staff Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapuaQ - Registrar Staff Monitor Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-mapua-cardinal { background-color: #800000; }
+        .text-mapua-cardinal { color: #800000; }
+        .border-mapua-cardinal { border-color: #800000 !important; }
+    </style>
 </head>
-<body class="bg-light py-4">
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">MapuaQ <span class="badge bg-warning text-dark fs-6">Registrar Priority</span></a>
+        <div class="navbar-nav">
+            <a class="nav-link" href="/">Student Check-In</a>
+            <a class="nav-link active" href="/dashboard">Queue Monitor</a>
+            <a class="nav-link" href="/analytics">Analytics</a>
+        </div>
+    </div>
+</nav>
+
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Registrar Priority Queue Monitor</h2>
-        <a href="/" class="btn btn-outline-secondary btn-sm">Student Form</a>
+        <div>
+            <h2 class="fw-bold text-mapua-cardinal mb-1">Registrar Priority Queue Monitor</h2>
+            <p class="text-muted mb-0">Binary Min-Heap Scheduling with Dynamic Priority Aging</p>
+        </div>
+        <a href="/" class="btn btn-outline-danger btn-sm">New Student Form</a>
     </div>
 
     {% if top %}
-    <div class="card border-primary mb-4 shadow-sm">
-        <div class="card-header bg-primary text-white font-weight-bold">Now Serving (Top Priority)</div>
+    <div class="card border-mapua-cardinal mb-4 shadow-sm">
+        <div class="card-header bg-mapua-cardinal text-white fw-bold d-flex justify-content-between align-items-center">
+            <span>NOW SERVING (Top Priority Root Node)</span>
+            <span class="badge bg-warning text-dark">Min-Heap Index 0</span>
+        </div>
         <div class="card-body d-flex justify-content-between align-items-center">
             <div>
-                <h4>#{{ top.ticket_id }} — {{ top.name }} ({{ top.standing_name }})</h4>
-                <p class="mb-0 text-muted"><strong>Request:</strong> {{ top.request_name }} | <strong>Score:</strong> {{ top.priority_score }}</p>
+                <h3 class="mb-1">#{{ top.ticket_id }} — {{ top.name }} <span class="fs-6 text-muted">({{ top.standing_name }})</span></h3>
+                <p class="mb-1 text-muted"><strong>Request:</strong> {{ top.request_name }}</p>
+                <p class="mb-0">
+                    <span class="badge bg-danger">Score: {{ top.priority_score }}</span>
+                    <span class="badge bg-info text-dark">Wait Time: {{ top.elapsed_minutes }} min(s)</span>
+                </p>
             </div>
             <form method="POST" action="/call-next">
-                <button type="submit" class="btn btn-success btn-lg">Call & Mark Served</button>
+                <button type="submit" class="btn btn-success btn-lg px-4 fw-bold">Call & Mark Served</button>
             </form>
         </div>
     </div>
     {% else %}
-    <div class="alert alert-info">No active tickets waiting in queue.</div>
+    <div class="alert alert-info shadow-sm mb-4">No active tickets waiting in queue.</div>
     {% endif %}
 
-    <h4>Waiting Queue (Min-Heap Ordered)</h4>
-    <table class="table table-bordered table-striped bg-white shadow-sm">
+    <h4 class="fw-bold text-secondary mb-3">Active Waiting Queue (Min-Heap Priority Order)</h4>
+    <table class="table table-bordered table-hover bg-white shadow-sm align-middle">
         <thead class="table-dark">
             <tr>
-                <th>Queue Pos</th>
-                <th>Ticket ID</th>
+                <th style="width: 8%;">Heap Pos</th>
+                <th style="width: 10%;">Ticket ID</th>
                 <th>Student Name</th>
                 <th>Academic Level</th>
                 <th>Request Type</th>
-                <th>Calculated Score</th>
+                <th style="width: 13%;">Wait Time ($\Delta t$)</th>
+                <th style="width: 13%;">Priority Score ($S$)</th>
             </tr>
         </thead>
         <tbody>
             {% for t in tickets %}
-            <tr>
-                <td>{{ loop.index }}</td>
+            <tr {% if loop.first %}class="table-warning fw-bold"{% endif %}>
+                <td class="text-center">{{ loop.index0 }}</td>
                 <td>#{{ t.ticket_id }}</td>
                 <td>{{ t.name }}</td>
-                <td>{{ t.standing_name }}</td>
+                <td><span class="badge bg-secondary">{{ t.standing_name }}</span></td>
                 <td>{{ t.request_name }}</td>
-                <td><span class="badge bg-secondary">{{ t.priority_score }}</span></td>
+                <td>{{ t.elapsed_minutes }} mins</td>
+                <td><span class="badge bg-danger">{{ t.priority_score }}</span></td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center text-muted py-3">No students waiting in queue.</td>
             </tr>
             {% endfor %}
         </tbody>
