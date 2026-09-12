@@ -1,7 +1,7 @@
 # MapuaQ: A Priority-Based Student Queuing System Using Min-Heap Algorithm and Dynamic Priority Aging
 
 **Course Code & Section:** CPE106L-4 / Section B2 (Software Design Laboratory)  
-**Institution:** Mapúa University, School of Electrical, Electronics, and Computer Engineering (EECE)  
+**Institution:** Mapúa University, School of Artificial Intelligence, Electrical, Computer, and Electronics Engineering (AIECEE)  
 **Instructor:** Dr. John De Guzman Tarampi  
 **Academic Term:** 1st Term, AY 2026-2027  
 
