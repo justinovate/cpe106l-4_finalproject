@@ -6,13 +6,13 @@
 **Academic Term:** 1st Term, AY 2026-2027  
 
 **Project Team & Specialized Roles (Team of 4):**
-- **Justin Andre D. De Leon** — Lead Software Architect & Core Backend Developer  
+- **Justin Andre De Leon** — Lead Software Architect & Core Backend Developer  
   *Responsibilities: System design, Flask web routing architecture, Strategy Design Pattern implementation, and overall integration.*
-- **Team Member 2** — Algorithm & Queueing Specialist  
+- **Hannah Grace Duldulao** — Algorithm & Queueing Specialist  
   *Responsibilities: Binary Min-Heap mechanics (`heap_queue.py`), dynamic priority aging formula implementation, priority weighting matrix, and tie-breaking algorithms.*
-- **Team Member 3** — Data Engineer & UI/UX Designer  
+- **Matt Eugene Hilado** — Data Engineer & UI/UX Designer  
   *Responsibilities: SQLite database schema (`schema.sql`), timestamp persistence, Bootstrap 5 templates (`checkin.html`, `dashboard.html`, `analytics.html`), and Matplotlib analytics integration (`analytics.py`).*
-- **Team Member 4** — Systems Analyst & QA Lead  
+- **Wilhelm Ferrer** — Systems Analyst & QA Lead  
   *Responsibilities: GitHub Kanban backlog management, `unittest` AAA test suites (`test_heap.py`, `test_app.py`), software quality assurance, and sprint documentation.*
 
 ---
