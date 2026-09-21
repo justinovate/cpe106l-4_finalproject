@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="10">
+    <title>MapuaQ - Ticket #{{ ticket.id }} Status</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-mapua-cardinal { background-color: #800000; }
+        .text-mapua-cardinal { color: #800000; }
+        .pulse-banner {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-light d-flex flex-column min-vh-100">
+
+<nav class="navbar navbar-dark bg-mapua-cardinal shadow-sm">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">
+            MapuaQ <span class="badge bg-warning text-dark fs-6 ms-1">Student Ticket Tracker</span>
+        </a>
+        <a href="/checkin" class="btn btn-outline-light btn-sm">New Check-In</a>
+    </div>
+</nav>
+
+<div class="container my-auto py-5" style="max-width: 600px;">
+
+    {% if ticket.status == 'CALLED' %}
+    <div class="alert alert-success border-success text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
+        <h2 class="fw-bold mb-1">📢 NOW SERVING!</h2>
+        <h4 class="mb-0">Please proceed immediately to the Registrar Counter.</h4>
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm border-0 rounded-3">
+        <div class="card-header bg-mapua-cardinal text-white text-center py-4">
+            <small class="text-uppercase tracking-wider opacity-75 fw-bold">Official Queue Ticket</small>
+            <h1 class="display-3 fw-bold mb-0">#{{ ticket.id }}</h1>
+        </div>
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <h4 class="fw-bold text-dark mb-1">{{ ticket.full_name }}</h4>
+                <p class="text-muted mb-0">Student ID: {{ ticket.student_id }}</p>
+                <div class="mt-2">
+                    <span class="badge bg-secondary p-2 fs-6">{{ ticket.request_type }}</span>
+                </div>
+            </div>
+
+            <hr class="my-4">
+
+            <!-- Status Card Info -->
+            <div class="text-center">
+                <h6 class="text-muted text-uppercase fw-bold mb-2">Current Ticket Status</h6>
+                
+                {% if ticket.status == 'WAITING' %}
+                    <div class="p-3 bg-warning bg-opacity-10 border border-warning rounded-3 mb-3">
+                        <h3 class="fw-bold text-warning text-dark mb-1">In Queue (Waiting)</h3>
+                        <p class="text-muted mb-0">Your ticket is active in the priority scheduling queue.</p>
+                    </div>
+
+                    <div class="row g-3 mt-2">
+                        <div class="col-6">
+                            <div class="p-3 bg-white border rounded text-center">
+                                <small class="text-muted d-block fw-bold">Students Ahead</small>
+                                <span class="fs-2 fw-bold text-mapua-cardinal">{{ students_ahead }}</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 bg-white border rounded text-center">
+                                <small class="text-muted d-block fw-bold">Est. Wait Time</small>
+                                <span class="fs-2 fw-bold text-mapua-cardinal">~{{ estimated_wait_mins }} min</span>
+                            </div>
+                        </div>
+                    </div>
+                {% elif ticket.status == 'CALLED' %}
+                    <div class="p-3 bg-success text-white rounded-3 mb-3">
+                        <h3 class="fw-bold mb-1">BEING CALLED</h3>
+                        <p class="mb-0">Registrar staff are ready to assist you now.</p>
+                    </div>
+                {% elif ticket.status == 'SERVED' %}
+                    <div class="p-3 bg-success bg-opacity-10 border border-success rounded-3 mb-3">
+                        <h3 class="fw-bold text-success mb-1">Completed / Served</h3>
+                        <p class="text-muted mb-0">Your transaction was processed successfully.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card-footer bg-white text-center py-3 border-0">
+            <small class="text-muted d-block mb-1">🔄 Page automatically refreshes every 10 seconds.</small>
+            <a href="/checkin" class="btn btn-link text-mapua-cardinal text-decoration-none btn-sm fw-bold">Issue Another Ticket</a>
+        </div>
+    </div>
+</div>
+
+<footer class="bg-white border-top py-3 text-center text-muted mt-auto">
+    <small>&copy; 2026 Mapúa University Registrar Priority System</small>
+</footer>
+
+</body>
+</html>

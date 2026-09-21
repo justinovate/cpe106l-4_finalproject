@@ -11,13 +11,28 @@
     </style>
 </head>
 <body class="bg-light">
+
 <nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm mb-4">
     <div class="container">
-        <a class="navbar-brand fw-bold" href="/">MapuaQ <span class="badge bg-warning text-dark fs-6">Registrar Priority</span></a>
-        <div class="navbar-nav">
-            <a class="nav-link" href="/">Student Check-In</a>
-            <a class="nav-link" href="/dashboard">Queue Monitor</a>
-            <a class="nav-link active" href="/analytics">Analytics</a>
+        <a class="navbar-brand fw-bold" href="/dashboard">
+            MapuaQ <span class="badge bg-warning text-dark fs-6 ms-1">Registrar Employee Portal</span>
+        </a>
+        <div class="navbar-nav me-auto">
+            <a class="nav-link fw-bold" href="/dashboard">Queue Monitor</a>
+            <a class="nav-link active fw-bold" href="/analytics">Analytics</a>
+            {% if user and user.role == 'admin' %}
+            <a class="nav-link fw-bold text-warning" href="/admin/users">Manage Staff Accounts</a>
+            {% endif %}
+        </div>
+        <div class="navbar-nav align-items-center">
+            {% if user %}
+            <span class="navbar-text text-light me-3">
+                Logged in as <strong>{{ user.full_name }}</strong> <span class="badge bg-light text-dark text-capitalize">{{ user.role }}</span>
+            </span>
+            <a href="/logout" class="btn btn-outline-light btn-sm fw-bold">Logout</a>
+            {% else %}
+            <a href="/login" class="btn btn-outline-light btn-sm fw-bold">Login</a>
+            {% endif %}
         </div>
     </div>
 </nav>
