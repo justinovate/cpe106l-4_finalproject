@@ -18,15 +18,26 @@ DB = "students_queue.db"
 strategy = StandardRegistrarStrategy()
 
 REQUEST_WEIGHTS = {
-    "Graduation Clearance / Drop Deadline": 1,
-    "Prerequisite Override / Grade Dispute": 3,
-    "Transcript (TOR) Pickup": 6,
-    "Certificate of Enrollment / Inquiry": 9,
+    "Application for Graduation": 1,
+    "Certificate for Graduation": 1,
+    "Course Completion": 2,
+    "Overload / Waiver": 2,
+    "Prerequisite-related Requests / Course Crediting": 2,
+    "Cancellation or Withdrawal of Enrollment": 3,
+    "Leave of Absence (LOA)": 3,
+    "Transcript of Records (TOR)": 4,
+    "Program Shifting or Specialization": 4,
+    "Transfer Credentials (Honorable Dismissal)": 5,
+    "Reactivation": 6,
+    "Form 137A (F137A)": 6,
+    "Diploma / Duplicate Diploma": 7,
+    "Profile Update / Correction of Information": 8,
+    "General Inquiry": 9,
 }
 
 LEVEL_WEIGHTS = {
     "Graduating Senior": 1,
-    "Non-Graduating Senior": 3,
+    "Senior (Non-Graduating)": 3,
     "Junior": 5,
     "Sophomore": 7,
     "Freshman": 9,

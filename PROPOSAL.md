@@ -113,11 +113,21 @@ Where:
 
 | Request Category ($W_{\text{request}}$) | Weight | Academic Year Level ($W_{\text{standing}}$) | Weight |
 | :--- | :---: | :--- | :---: |
-| Graduation Clearance / Drop Deadline | **1** | Graduating Senior | **1** |
-| Prerequisite Override / Grade Dispute | **3** | Senior (Non-Graduating) | **3** |
-| Official Transcript (TOR) Pickup | **6** | Junior | **5** |
-| Certificate of Enrollment / Inquiry | **9** | Sophomore | **7** |
-| | | Freshman | **9** |
+| Application for Graduation | **1** | Graduating Senior | **1** |
+| Certificate for Graduation | **1** | Senior (Non-Graduating) | **3** |
+| Course Completion | **2** | Junior | **5** |
+| Overload / Waiver | **2** | Sophomore | **7** |
+| Prerequisite-related Requests / Course Crediting | **2** | Freshman | **9** |
+| Cancellation or Withdrawal of Enrollment | **3** | | |
+| Leave of Absence (LOA) | **3** | | |
+| Transcript of Records (TOR) | **4** | | |
+| Program Shifting or Specialization | **4** | | |
+| Transfer Credentials (Honorable Dismissal) | **5** | | |
+| Reactivation | **6** | | |
+| Form 137A (F137A) | **6** | | |
+| Diploma / Duplicate Diploma | **7** | | |
+| Profile Update / Correction of Information | **8** | | |
+| General Inquiry | **9** | | |
 
 #### Literature Justifications
 1. **Min-Heap Efficiency (*Cormen, Leiserson, Rivest, & Stein, 2009*)**: In *Introduction to Algorithms*, binary min-heaps are proven to guarantee $O(1)$ time complexity for inspecting the minimum element (root node at index 0) and $O(\log N)$ time complexity for insertions and extractions. This significantly outperforms unsorted arrays ($O(N)$ lookup) and linear linked lists ($O(N)$ insertion).
@@ -348,10 +358,10 @@ The MapuaQ development lifecycle strictly adheres to Dr. John De Guzman Tarampi'
 
 | Sprint / Week | Activities & Task Distribution | Deliverables & Artifacts |
 | :--- | :--- | :--- |
-| **Sprint 1**<br>*(Week 7 $\rightarrow$ Due W8)*<br>**Core Algorithm & POC** | - **Justin**: Architect object model & Strategy Pattern.<br>- **Team Member 2**: Write `heap_queue.py` Min-Heap operations & `__lt__` comparison.<br>- **Team Member 3**: Write `schema.sql` supporting `REAL` Unix timestamps.<br>- **Team Member 4**: Setup GitHub Kanban board & write `test_heap.py`. | - Operational `heap_queue.py`.<br>- Verified `schema.sql` DDL.<br>- Initial `test_heap.py` suite.<br>- Active GitHub Kanban board. |
-| **Sprint 2**<br>*(Week 8 $\rightarrow$ Due W9)*<br>**Web Controller & UI** | - **Justin**: Build Flask web routes (`app.py`) for `/` and `/dashboard`.<br>- **Team Member 2**: Implement `/call-next` ticket dispatching logic.<br>- **Team Member 3**: Create Bootstrap 5 templates (`checkin.html`, `dashboard.html`).<br>- **Team Member 4**: Conduct manual UI/UX testing & ticket status validation. | - Working web controller (`app.py`).<br>- Responsive HTML5 templates.<br>- Status transitions (`'WAITING'` $\rightarrow$ `'SERVED'`).<br>- Mid-project milestone review. |
-| **Sprint 3**<br>*(Week 9 $\rightarrow$ Due W10)*<br>**Dynamic Aging & Routing** | - **Justin**: Connect arrival timestamp persistence across web routes.<br>- **Team Member 2**: Build `refresh_scores()` $O(N)$ re-heapify pass.<br>- **Team Member 3**: Update dashboard UI with wait time ($\Delta t$) counters.<br>- **Team Member 4**: Build `tests/test_app.py` AAA integration test suite. | - Dynamic aging engine.<br>- Automatic queue re-heapification.<br>- AAA route test suite (`test_app.py`).<br>- Starvation prevention validation. |
-| **Sprint 4**<br>*(Week 10 $\rightarrow$ Final)*<br>**Analytics & Oral Defense** | - **Justin**: Perform system code refactoring & final optimization.<br>- **Team Member 2**: Finalize mathematical formula documentation.<br>- **Team Member 3**: Implement Matplotlib engine (`analytics.py` & `analytics.html`).<br>- **Team Member 4**: Compile final `PROPOSAL.md`, slides, & lead QA verification. | - Headless Matplotlib analytics.<br>- 100% passing test suite (8 tests).<br>- Submission-ready `PROPOSAL.md`.<br>- Project defense presentation. |
+| **Sprint 1**<br>*(Week 7 $\rightarrow$ Due W8)*<br>**Core Algorithm & POC** | - **Justin**: Architect object model & Strategy Pattern.<br>- **Hannah**: Write `heap_queue.py` Min-Heap operations & `__lt__` comparison.<br>- **Matt**: Write `schema.sql` supporting `REAL` Unix timestamps.<br>- **Wilhelm**: Setup GitHub Kanban board & write `test_heap.py`. | - Operational `heap_queue.py`.<br>- Verified `schema.sql` DDL.<br>- Initial `test_heap.py` suite.<br>- Active GitHub Kanban board. |
+| **Sprint 2**<br>*(Week 8 $\rightarrow$ Due W9)*<br>**Web Controller & UI** | - **Justin**: Build Flask web routes (`app.py`) for `/` and `/dashboard`.<br>- **Hannah**: Implement `/call-next` ticket dispatching logic.<br>- **Matt**: Create Bootstrap 5 templates (`checkin.html`, `dashboard.html`).<br>- **Wilhelm**: Conduct manual UI/UX testing & ticket status validation. | - Working web controller (`app.py`).<br>- Responsive HTML5 templates.<br>- Status transitions (`'WAITING'` $\rightarrow$ `'SERVED'`).<br>- Mid-project milestone review. |
+| **Sprint 3**<br>*(Week 9 $\rightarrow$ Due W10)*<br>**Dynamic Aging & Routing** | - **Justin**: Connect arrival timestamp persistence across web routes.<br>- **Hannah**: Build `refresh_scores()` $O(N)$ re-heapify pass.<br>- **Matt**: Update dashboard UI with wait time ($\Delta t$) counters.<br>- **Wilhelm**: Build `tests/test_app.py` AAA integration test suite. | - Dynamic aging engine.<br>- Automatic queue re-heapification.<br>- AAA route test suite (`test_app.py`).<br>- Starvation prevention validation. |
+| **Sprint 4**<br>*(Week 10 $\rightarrow$ Final)*<br>**Analytics & Oral Defense** | - **Justin**: Perform system code refactoring & final optimization.<br>- **Hannah**: Finalize mathematical formula documentation.<br>- **Matt**: Implement Matplotlib engine (`analytics.py` & `analytics.html`).<br>- **Wilhelm**: Compile final `PROPOSAL.md`, slides, & lead QA verification. | - Headless Matplotlib analytics.<br>- 100% passing test suite (8 tests).<br>- Submission-ready `PROPOSAL.md`.<br>- Project defense presentation. |
 
 ---
 

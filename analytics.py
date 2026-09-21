@@ -60,9 +60,9 @@ def generate_queue_volume_chart(db_path: str = "students_queue.db") -> bytes:
     waiting_counts = [r[1] for r in rows] if rows else [0]
     served_counts = [r[2] for r in rows] if rows else [0]
 
-    short_cats = [c.split(" / ")[0] for c in categories]
+    short_cats = [c[:25] + "..." if len(c) > 28 else c for c in categories]
 
-    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
+    fig, ax = plt.subplots(figsize=(9, 5), dpi=120)
     x = range(len(categories))
     width = 0.35
 
@@ -72,7 +72,7 @@ def generate_queue_volume_chart(db_path: str = "students_queue.db") -> bytes:
     ax.set_ylabel('Number of Tickets', fontsize=11, fontweight='bold')
     ax.set_title('MapuaQ Queue Volume by Request Type', fontsize=13, fontweight='bold', pad=15)
     ax.set_xticks(list(x))
-    ax.set_xticklabels(short_cats, rotation=15, ha='right', fontsize=9)
+    ax.set_xticklabels(short_cats, rotation=35, ha='right', fontsize=8)
     ax.legend(frameon=True, facecolor='#f8f9fa')
     ax.grid(axis='y', linestyle='--', alpha=0.5)
 

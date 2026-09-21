@@ -28,7 +28,7 @@ class TestMapuaQRoutes(unittest.TestCase):
         form_data = {
             "student_id": "2024109876",
             "full_name": "Maria Santos",
-            "request_type": "Graduation Clearance / Drop Deadline",
+            "request_type": "Application for Graduation",
             "grade_level": "Graduating Senior"
         }
 
@@ -57,7 +57,7 @@ class TestMapuaQRoutes(unittest.TestCase):
         conn = sqlite3.connect(DB)
         conn.execute("""
             INSERT INTO tickets (student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024001', 'Juan Dela Cruz', 'Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
+            VALUES ('2024001', 'Juan Dela Cruz', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
         """, (time.time(),))
         conn.commit()
         conn.close()
@@ -76,7 +76,7 @@ class TestMapuaQRoutes(unittest.TestCase):
         conn = sqlite3.connect(DB)
         conn.execute("""
             INSERT INTO tickets (student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2021001', 'Alex Senior', 'Graduation Clearance / Drop Deadline', 1, 'Graduating Senior', 1, ?, 1.0, 'WAITING')
+            VALUES ('2021001', 'Alex Senior', 'Application for Graduation', 1, 'Graduating Senior', 1, ?, 1.0, 'WAITING')
         """, (time.time(),))
         conn.commit()
         conn.close()

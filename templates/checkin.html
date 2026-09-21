@@ -50,20 +50,49 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold">Request Type</label>
                     <select name="request_type" class="form-select" required>
-                        <option value="Graduation Clearance / Drop Deadline">Graduation Clearance / Drop Deadline (Urgency W=1)</option>
-                        <option value="Prerequisite Override / Grade Dispute">Prerequisite Override / Grade Dispute (Urgency W=3)</option>
-                        <option value="Transcript (TOR) Pickup">Official Transcript (TOR) Pickup (Urgency W=6)</option>
-                        <option value="Certificate of Enrollment / Inquiry">Certificate of Enrollment / Inquiry (Urgency W=9)</option>
+                        <optgroup label="Priority Tier 1 (Urgency W-1)">
+                            <option value="Application for Graduation">Application for Graduation (W-1)</option>
+                            <option value="Certificate for Graduation">Certificate for Graduation (W-1)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 2 (Urgency W-2)">
+                            <option value="Course Completion">Course Completion (W-2)</option>
+                            <option value="Overload / Waiver">Overload / Waiver (W-2)</option>
+                            <option value="Prerequisite-related Requests / Course Crediting">Prerequisite-related Requests / Course Crediting (W-2)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 3 (Urgency W-3)">
+                            <option value="Cancellation or Withdrawal of Enrollment">Cancellation or Withdrawal of Enrollment (W-3)</option>
+                            <option value="Leave of Absence (LOA)">Leave of Absence (LOA) (W-3)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 4 (Urgency W-4)">
+                            <option value="Transcript of Records (TOR)">Transcript of Records (TOR) (W-4)</option>
+                            <option value="Program Shifting or Specialization">Program Shifting or Specialization (W-4)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 5 (Urgency W-5)">
+                            <option value="Transfer Credentials (Honorable Dismissal)">Transfer Credentials (Honorable Dismissal) (W-5)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 6 (Urgency W-6)">
+                            <option value="Reactivation">Reactivation (W-6)</option>
+                            <option value="Form 137A (F137A)">Form 137A (F137A) (W-6)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 7 (Urgency W-7)">
+                            <option value="Diploma / Duplicate Diploma">Diploma / Duplicate Diploma (W-7)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 8 (Urgency W-8)">
+                            <option value="Profile Update / Correction of Information">Profile Update / Correction of Information (W-8)</option>
+                        </optgroup>
+                        <optgroup label="Priority Tier 9 (Urgency W-9)">
+                            <option value="General Inquiry">General Inquiry (W-9)</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Academic Year Level</label>
                     <select name="grade_level" class="form-select" required>
-                        <option value="Graduating Senior">Graduating Senior (Standing W=1)</option>
-                        <option value="Non-Graduating Senior">Senior (Standing W=3)</option>
-                        <option value="Junior">Junior (Standing W=5)</option>
-                        <option value="Sophomore">Sophomore (Standing W=7)</option>
-                        <option value="Freshman">Freshman (Standing W=9)</option>
+                        <option value="Graduating Senior">Graduating Senior (Standing W-1)</option>
+                        <option value="Senior (Non-Graduating)">Senior (Non-Graduating) (Standing W-3)</option>
+                        <option value="Junior">Junior (Standing W-5)</option>
+                        <option value="Sophomore">Sophomore (Standing W-7)</option>
+                        <option value="Freshman">Freshman (Standing W-9)</option>
                     </select>
                 </div>
                 <button type="submit" class="btn btn-mapua-cardinal w-100 py-2 fw-bold shadow-sm">Submit Check-In Ticket</button>
