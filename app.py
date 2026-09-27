@@ -197,8 +197,13 @@ def load_queue_from_db() -> RegistrarMinHeapQueue:
 
 @app.route("/")
 def index():
-    """Main Landing Portal offering Student Kiosk and Staff Login pathways."""
-    return render_template("index.html", user=session.get("user"))
+    """Main Entry Point — Redirects unauthenticated users directly to unified /login."""
+    if "user" in session:
+        role = session["user"].get("role")
+        if role in ("staff", "admin"):
+            return redirect(url_for("dashboard"))
+        return redirect(url_for("checkin"))
+    return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
