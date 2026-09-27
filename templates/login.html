@@ -3,37 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MapuaQ - Sign In</title>
+    <title>Mapúa Cardinal Edge - Sign In</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        body {
+            background-color: #1a1e24;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-vh: 100vh;
+        }
         .bg-mapua-cardinal { background-color: #800000; }
-        .text-mapua-cardinal { color: #800000; }
-        .btn-mapua-cardinal { background-color: #800000; color: white; border: none; }
-        .btn-mapua-cardinal:hover { background-color: #600000; color: white; }
+        .text-mapua-cardinal { color: #cc0000; }
+        .btn-cardinal {
+            background-color: #800000;
+            color: white;
+            border: 1px solid #a00000;
+            font-weight: 600;
+        }
+        .btn-cardinal:hover {
+            background-color: #a00000;
+            color: white;
+        }
+        .login-card {
+            background-color: #242933;
+            border: 1px solid #333a48;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .form-control-dark {
+            background-color: #1a1e24;
+            border: 1px solid #404859;
+            color: #ffffff;
+        }
+        .form-control-dark:focus {
+            background-color: #1f242d;
+            border-color: #800000;
+            color: #ffffff;
+            box-shadow: 0 0 0 0.25rem rgba(128, 0, 0, 0.25);
+        }
+        .logo-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: #800000;
+            border: 3px solid #ffcc00;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin: 0 auto 1rem auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
     </style>
 </head>
-<body class="bg-light">
+<body class="d-flex align-items-center justify-content-center min-vh-100 py-5">
 
-<nav class="navbar navbar-dark bg-mapua-cardinal shadow-sm">
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="/">
-            MapuaQ <span class="badge bg-warning text-dark fs-6 ms-1">Registrar Portal</span>
-        </a>
-        <a href="/" class="btn btn-outline-light btn-sm">Home</a>
-    </div>
-</nav>
-
-<div class="container py-5" style="max-width: 480px;">
-    <div class="card shadow border-0 rounded-3">
-        <div class="card-header bg-mapua-cardinal text-white text-center py-3">
-            <h4 class="mb-0 fw-bold">Sign In to MapuaQ</h4>
-            <small class="text-light opacity-75">Student, Staff &amp; Administrator Portal</small>
+<div class="container" style="max-width: 440px;">
+    <div class="card login-card p-4">
+        <div class="text-center pt-2 pb-3">
+            <div class="logo-circle text-warning fw-bold">M</div>
+            <h2 class="fw-bold tracking-wide mb-1" style="color: #e60000; letter-spacing: 1.5px;">CARDINAL EDGE</h2>
+            <p class="text-secondary small mb-0 fw-bold">MAPÚA UNIVERSITY REGISTRAR PORTAL</p>
         </div>
-        <div class="card-body p-4">
+
+        <div class="card-body px-2 py-3">
             {% with messages = get_flashed_messages(with_categories=true) %}
               {% if messages %}
                 {% for category, message in messages %}
-                  <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                  <div class="alert alert-{{ category }} alert-dismissible fade show small py-2" role="alert">
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                   </div>
@@ -43,23 +80,23 @@
 
             <form method="POST" action="/login">
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Mapúa Email or Student ID</label>
-                    <input type="text" name="identifier" class="form-control form-control-lg" placeholder="e.g. 2024180029 or student@mymail.mapua.edu.ph" required autofocus>
+                    <label class="form-label text-light small fw-bold">Mapúa Email / Account ID</label>
+                    <input type="text" name="identifier" class="form-control form-control-dark py-2" placeholder="username@mymail.mapua.edu.ph or ID" required autofocus>
                 </div>
                 <div class="mb-4">
-                    <label class="form-label fw-bold">Password</label>
-                    <input type="password" name="password" class="form-control form-control-lg" placeholder="Enter password" required>
+                    <label class="form-label text-light small fw-bold">Password</label>
+                    <input type="password" name="password" class="form-control form-control-dark py-2" placeholder="Enter password" required>
                 </div>
-                <button type="submit" class="btn btn-mapua-cardinal w-100 py-3 fw-bold shadow-sm">
+                <button type="submit" class="btn btn-cardinal w-100 py-2.5 shadow-sm">
                     Sign In
                 </button>
             </form>
         </div>
-        <div class="card-footer bg-white text-center py-3 border-0">
-            <p class="mb-0 text-muted">
-                Don't have a MapuaQ account? 
-                <a href="/register" class="fw-bold text-mapua-cardinal text-decoration-none">Register as Student</a>
-            </p>
+
+        <div class="text-center pb-2 pt-2 border-top border-secondary opacity-75">
+            <small class="text-secondary" style="font-size: 0.78rem;">
+                Account access &amp; provisioning are managed by Mapúa Registrar Administration.
+            </small>
         </div>
     </div>
 </div>

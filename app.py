@@ -203,14 +203,13 @@ def index():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """Unified Authentication View accepting Mapúa MyMail or Student ID."""
+    """Unified Authentication View accepting Mapúa Email, Employee ID, or Student ID."""
     if request.method == "POST":
         identifier = request.form.get("identifier", "").strip()
         password = request.form.get("password", "")
 
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
-        # Search by email OR student_id OR legacy username
         cursor.execute("""
             SELECT id, student_id, email, password_hash, full_name, role, program_dept, avatar_url
             FROM users
@@ -228,86 +227,23 @@ def login():
                 "role": row[5],
                 "program_dept": row[6],
                 "avatar_url": row[7] or "/static/uploads/avatars/default.png",
-                "username": row[1] or row[2]  # Backward compatibility for audit trails
+                "username": row[1] or row[2]
             }
             flash(f"Welcome back, {row[4]}!", "success")
             if row[5] in ("staff", "admin"):
                 return redirect(url_for("dashboard"))
-            return redirect(url_for("profile"))
+            return redirect(url_for("checkin"))
         else:
-            flash("Invalid credentials. Please verify your Student ID / Email and password.", "danger")
+            flash("Invalid credentials. Please verify your Email / Account ID and password.", "danger")
 
     return render_template("login.html", user=session.get("user"))
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    """Student Account Registration with institutional email validation and avatar upload."""
-    if request.method == "POST":
-        full_name = request.form.get("full_name", "").strip()
-        student_id = request.form.get("student_id", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        program_dept = request.form.get("program_dept", "").strip()
-        password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
-
-        # Validation Checks
-        if not full_name or not student_id or not email or not password:
-            flash("Please fill in all required fields.", "danger")
-            return render_template("register.html", user=session.get("user"))
-
-        if password != confirm_password:
-            flash("Passwords do not match.", "danger")
-            return render_template("register.html", user=session.get("user"))
-
-        # Student ID format check (numeric format)
-        if not re.match(r"^\d{6,12}$", student_id) and not re.match(r"^\d{4}-\d{4,6}$", student_id):
-            flash("Invalid Student ID format (e.g., 2024180029 or 2024-180029).", "danger")
-            return render_template("register.html", user=session.get("user"))
-
-        # Institutional Email check
-        if not email.endswith("@mymail.mapua.edu.ph") and not email.endswith("@mapua.edu.ph"):
-            flash("Registration requires an official Mapúa email (@mymail.mapua.edu.ph or @mapua.edu.ph).", "danger")
-            return render_template("register.html", user=session.get("user"))
-
-        role = "student"
-        if email.endswith("@mapua.edu.ph") and not email.endswith("@mymail.mapua.edu.ph"):
-            role = "staff"
-
-        # Avatar Upload Processing
-        avatar_url = "/static/uploads/avatars/default.png"
-        if "avatar" in request.files:
-            file = request.files["avatar"]
-            if file and file.filename != "" and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                ext = filename.rsplit(".", 1)[1].lower()
-                unique_filename = f"avatar_{student_id}_{int(time.time())}_{uuid.uuid4().hex[:6]}.{ext}"
-                file.save(os.path.join(UPLOAD_FOLDER, unique_filename))
-                avatar_url = f"/static/uploads/avatars/{unique_filename}"
-
-        # DB Insertion
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        
-        # Check uniqueness
-        cursor.execute("SELECT id FROM users WHERE email = ? OR student_id = ?", (email, student_id))
-        if cursor.fetchone():
-            flash("An account with this Email or Student ID already exists.", "danger")
-            conn.close()
-            return render_template("register.html", user=session.get("user"))
-
-        pass_hash = generate_password_hash(password)
-        cursor.execute("""
-            INSERT INTO users (student_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (student_id, email, pass_hash, full_name, role, program_dept, avatar_url, time.time()))
-        conn.commit()
-        conn.close()
-
-        flash("Registration successful! You may now log in with your credentials.", "success")
-        return redirect(url_for("login"))
-
-    return render_template("register.html", user=session.get("user"))
+    """Public registration disabled — Account access is provisioned by Registrar Administration."""
+    flash("Account access is managed by Mapúa Registrar Administration. Please log in with your provisioned credentials.", "info")
+    return redirect(url_for("login"))
 
 
 @app.route("/logout")
@@ -457,8 +393,9 @@ def profile():
 
 
 @app.route("/checkin", methods=["GET", "POST"])
+@login_required
 def checkin():
-    """Student Priority Check-In form."""
+    """Student Priority Check-In form (Requires Student Login)."""
     if request.method == "POST":
         student_id = request.form.get("student_id", "").strip()
         full_name = request.form.get("full_name", "").strip()

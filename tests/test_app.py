@@ -44,38 +44,55 @@ class TestMapuaQRoutes(unittest.TestCase):
             self.assertEqual(sess["user"]["email"], "admin@mapua.edu.ph")
             self.assertEqual(sess["user"]["role"], "admin")
 
-    def test_student_registration_and_login(self):
-        """Verifies student account registration with MyMail validation and login."""
-        # Act 1: Register Student
-        reg_response = self.client.post("/register", data={
-            "full_name": "Juan Dela Cruz",
-            "student_id": "2024180029",
+    def test_admin_provision_student_account_and_login(self):
+        """Verifies admin POST /admin/users provisions student account and student logs in."""
+        # Act 1: Admin provisions student account
+        self._login_as_admin()
+        prov_res = self.client.post("/admin/users", data={
+            "student_id": "2024000001",
             "email": "jdelacruz@mymail.mapua.edu.ph",
+            "full_name": "Juan Dela Cruz",
             "program_dept": "BS Computer Engineering",
             "password": "StudentPass2026!",
-            "confirm_password": "StudentPass2026!"
+            "role": "student"
         }, follow_redirects=True)
 
-        self.assertEqual(reg_response.status_code, 200)
-        self.assertIn(b"Registration successful!", reg_response.data)
+        self.assertEqual(prov_res.status_code, 200)
+        self.assertIn(b"jdelacruz@mymail.mapua.edu.ph", prov_res.data)
 
-        # Act 2: Log in as registered student
-        login_response = self.client.post("/login", data={
-            "identifier": "2024180029",
+        # Act 2: Log out admin and log in as provisioned student
+        self.client.get("/logout")
+        login_res = self.client.post("/login", data={
+            "identifier": "2024000001",
             "password": "StudentPass2026!"
         }, follow_redirects=True)
 
-        # Assert
-        self.assertEqual(login_response.status_code, 200)
+        # Assert: Student login redirects to checkin kiosk
+        self.assertEqual(login_res.status_code, 200)
         with self.client.session_transaction() as sess:
-            self.assertEqual(sess["user"]["student_id"], "2024180029")
+            self.assertEqual(sess["user"]["student_id"], "2024000001")
             self.assertEqual(sess["user"]["role"], "student")
 
     def test_student_checkin_route_post_and_redirect(self):
-        """Verifies student check-in POST request inserts ticket into SQLite and redirects to /ticket/<id>."""
-        # Arrange
+        """Verifies authenticated student check-in POST inserts ticket into SQLite and redirects to /ticket/<id>."""
+        # Arrange: Provision student and log in
+        self._login_as_admin()
+        self.client.post("/admin/users", data={
+            "student_id": "2024000002",
+            "email": "msantos@mymail.mapua.edu.ph",
+            "full_name": "Maria Santos",
+            "program_dept": "BS Electrical Engineering",
+            "password": "StudentPass2026!",
+            "role": "student"
+        })
+        self.client.get("/logout")
+        self.client.post("/login", data={
+            "identifier": "2024000002",
+            "password": "StudentPass2026!"
+        })
+
         form_data = {
-            "student_id": "2024109876",
+            "student_id": "2024000002",
             "full_name": "Maria Santos",
             "email": "msantos@mymail.mapua.edu.ph",
             "request_type": "Application for Graduation",
@@ -91,12 +108,12 @@ class TestMapuaQRoutes(unittest.TestCase):
         
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
-        cursor.execute("SELECT id, student_id, full_name, priority_score, status FROM tickets WHERE student_id = '2024109876'")
+        cursor.execute("SELECT id, student_id, full_name, priority_score, status FROM tickets WHERE student_id = '2024000002'")
         row = cursor.fetchone()
         conn.close()
 
         self.assertIsNotNone(row)
-        self.assertEqual(row[1], "2024109876")
+        self.assertEqual(row[1], "2024000002")
         self.assertEqual(row[2], "Maria Santos")
         self.assertEqual(row[3], 1.0)  # (1 * 0.6) + (1 * 0.4) = 1.0
         self.assertEqual(row[4], "WAITING")

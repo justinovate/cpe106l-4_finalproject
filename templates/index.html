@@ -31,8 +31,7 @@
                 <a href="/profile" class="btn btn-outline-light btn-sm me-2">My Profile</a>
                 <a href="/logout" class="btn btn-outline-warning btn-sm">Logout</a>
             {% else %}
-                <a href="/login" class="btn btn-outline-light btn-sm me-2">Sign In</a>
-                <a href="/register" class="btn btn-warning btn-sm fw-bold">Register</a>
+                <a href="/login" class="btn btn-warning btn-sm fw-bold">Sign In to MapuaQ</a>
             {% endif %}
         </div>
     </div>
@@ -54,9 +53,15 @@
                     <p class="text-muted mb-4">
                         Submit a priority check-in ticket for registrar services and track your queue status in real-time.
                     </p>
-                    <a href="/checkin" class="btn btn-mapua-cardinal btn-lg px-4 fw-bold w-100">
-                        Get Ticket / Check-In
-                    </a>
+                    {% if user %}
+                        <a href="/checkin" class="btn btn-mapua-cardinal btn-lg px-4 fw-bold w-100">
+                            Get Ticket / Check-In
+                        </a>
+                    {% else %}
+                        <a href="/login" class="btn btn-mapua-cardinal btn-lg px-4 fw-bold w-100">
+                            Sign In to Get Ticket
+                        </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -70,9 +75,15 @@
                     <p class="text-muted mb-4">
                         Authorized staff and administration portal to monitor live queues, call tickets, and view analytics.
                     </p>
-                    <a href="/login" class="btn btn-outline-danger btn-lg px-4 fw-bold w-100">
-                        Employee Login
-                    </a>
+                    {% if user and user.role in ('staff', 'admin') %}
+                        <a href="/dashboard" class="btn btn-outline-danger btn-lg px-4 fw-bold w-100">
+                            Open Queue Monitor
+                        </a>
+                    {% else %}
+                        <a href="/login" class="btn btn-outline-danger btn-lg px-4 fw-bold w-100">
+                            Employee Login
+                        </a>
+                    {% endif %}
                 </div>
             </div>
         </div>

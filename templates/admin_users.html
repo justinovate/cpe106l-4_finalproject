@@ -54,39 +54,40 @@
         <div class="col-md-5">
             <div class="card shadow-sm border-0 rounded-3">
                 <div class="card-header bg-mapua-cardinal text-white fw-bold py-3">
-                    Provision Staff / Admin Account
+                    Provision Account (Student / Staff / Admin)
                 </div>
                 <div class="card-body p-4">
                     <form method="POST" action="/admin/users">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Mapúa Email</label>
-                            <input type="email" name="email" class="form-control" placeholder="staff@mapua.edu.ph" required>
+                            <label class="form-label fw-bold">Mapúa Email Address</label>
+                            <input type="email" name="email" class="form-control" placeholder="username@mymail.mapua.edu.ph or staff@mapua.edu.ph" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Full Name</label>
-                            <input type="text" name="full_name" class="form-control" placeholder="e.g. John Smith" required>
+                            <input type="text" name="full_name" class="form-control" placeholder="e.g. Juan Dela Cruz" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Student / Employee ID (Optional)</label>
-                            <input type="text" name="student_id" class="form-control" placeholder="e.g. 2024990011">
+                            <label class="form-label fw-bold">Student / Employee ID Number</label>
+                            <input type="text" name="student_id" class="form-control" placeholder="e.g. 2024000001 or EMP-2026-01" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Department / Office</label>
-                            <input type="text" name="program_dept" class="form-control" placeholder="e.g. Registrar Counter 1" value="Registrar Staff">
+                            <label class="form-label fw-bold">Program / Office Department</label>
+                            <input type="text" name="program_dept" class="form-control" placeholder="e.g. BS Computer Engineering or Registrar Counter 1">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Password</label>
-                            <input type="password" name="password" class="form-control" placeholder="Enter account password" required>
+                            <label class="form-label fw-bold">Initial Password</label>
+                            <input type="password" name="password" class="form-control" placeholder="Set temporary account password" required>
                         </div>
                         <div class="mb-4">
-                            <label class="form-label fw-bold">Role Privilege</label>
+                            <label class="form-label fw-bold">Account Role &amp; Privilege</label>
                             <select name="role" class="form-select" required>
-                                <option value="staff" selected>Registrar Staff</option>
+                                <option value="student">Student (MyMail Account)</option>
+                                <option value="staff" selected>Registrar Staff (Employee)</option>
                                 <option value="admin">Lead Registrar / Admin</option>
                             </select>
                         </div>
                         <button type="submit" class="btn btn-danger w-100 py-2 fw-bold bg-mapua-cardinal">
-                            Create User Account
+                            Provision User Account
                         </button>
                     </form>
                 </div>
