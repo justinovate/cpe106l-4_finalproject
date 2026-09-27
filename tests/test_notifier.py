@@ -76,6 +76,18 @@ class TestNotifierModule(unittest.TestCase):
         )
         self.assertTrue(result)
 
+    def test_send_welcome_account_notice_dev_mode(self):
+        """Verifies send_welcome_account_notice formats account creation & verification email in Dev Mode."""
+        result = notifier.send_welcome_account_notice(
+            to_email="newstudent@mymail.mapua.edu.ph",
+            full_name="New Provisioned Student",
+            account_id="2026100001",
+            default_password="DefaultPass123!",
+            verification_token="mock_verify_token_12345",
+            role="student"
+        )
+        self.assertTrue(result)
+
     def test_smtp_delivery_fallback_on_error(self):
         """Verifies SMTP delivery failure logs error and falls back without crashing."""
         Config.EMAIL_DEV_MODE = False

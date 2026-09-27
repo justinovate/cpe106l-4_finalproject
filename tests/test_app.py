@@ -747,6 +747,53 @@ class TestMapuaQRoutes(unittest.TestCase):
 
         self.assertEqual(must_change, 0)
 
+    def test_verify_email_route_valid_token(self):
+        """Verifies GET /verify-email/<token> marks email_verified=1 and clears verification_token."""
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO students (student_id, email, password_hash, full_name, email_verified, verification_token, created_at)
+            VALUES ('2024777001', 'verifytest@mymail.mapua.edu.ph', 'Hash123', 'Verify Test Student', 0, 'valid_token_abc123', ?)
+        """, (time.time(),))
+        st_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        res = self.client.get("/verify-email/valid_token_abc123", follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"successfully verified", res.data)
+
+        # Check DB state
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT email_verified, verification_token FROM students WHERE id = ?", (st_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        self.assertEqual(row[0], 1)
+        self.assertIsNone(row[1])
+
+    def test_resend_verification_route(self):
+        """Verifies POST /resend-verification dispatches new verification notice for unverified student."""
+        from werkzeug.security import generate_password_hash
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        pass_hash = generate_password_hash("StudentPass2026!")
+        cursor.execute("""
+            INSERT INTO students (student_id, email, password_hash, full_name, email_verified, verification_token, created_at)
+            VALUES ('2024777002', 'resendtest@mymail.mapua.edu.ph', ?, 'Resend Test Student', 0, 'token_xyz987', ?)
+        """, (pass_hash, time.time()))
+        st_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Login student
+        self.client.post("/login", data={"identifier": "2024777002", "password": "StudentPass2026!"})
+
+        res = self.client.post("/resend-verification", follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"fresh email verification link has been dispatched", res.data)
+
 
 if __name__ == "__main__":
     unittest.main()

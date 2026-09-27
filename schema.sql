@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS staff_users (
     phone_number TEXT NULL,
     avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
     avatar_position TEXT DEFAULT 'center',
+    must_change_password INTEGER DEFAULT 0,
+    email_verified INTEGER DEFAULT 1,
+    verification_token TEXT NULL,
     created_at REAL NOT NULL
 );
 
@@ -25,6 +28,9 @@ CREATE TABLE IF NOT EXISTS students (
     phone_number TEXT NULL,
     avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
     avatar_position TEXT DEFAULT 'center',
+    must_change_password INTEGER DEFAULT 0,
+    email_verified INTEGER DEFAULT 0,
+    verification_token TEXT NULL,
     created_at REAL NOT NULL
 );
 

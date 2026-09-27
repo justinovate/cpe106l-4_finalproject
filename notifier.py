@@ -1,7 +1,7 @@
 """
 MapuaQ Automated Email Notification Service
 Supports Dual-Mode Switch (Live SMTP vs. Development/Demo Mode) with Graceful Fallback.
-Dispatches asynchronous notifications for queue lifecycle events and security password resets.
+Dispatches asynchronous notifications for queue lifecycle events, security password resets, and account email verification.
 """
 
 import os
@@ -342,6 +342,70 @@ Mapúa University Registrar Office
             </p>
             <p style="font-size: 0.85rem; color: #777; margin-top: 20px; text-align: center;">
                 If you did not request a password reset, please notify Mapúa Registrar Administration immediately.
+            </p>
+        </div>
+    </div>
+    """
+    return _send_email_async(to_email, subject, body_text, body_html)
+
+
+def send_welcome_account_notice(to_email: str, full_name: str, account_id: str, default_password: str, verification_token: str, role: str = "student", base_url: str = None) -> bool:
+    """Dispatched when Admin provisions a new student or staff account with default credentials and email verification link."""
+    base_url = base_url or Config.BASE_URL
+    verify_link = f"{base_url}/verify-email/{verification_token}"
+    login_link = f"{base_url}/login"
+
+    subject = "Welcome to MapúaQ — Account Provisioned & Email Verification Required"
+    body_text = f"""Dear {full_name},
+
+Welcome to MapúaQ! Your official Mapúa Registrar priority queuing account has been provisioned.
+
+YOUR ACCOUNT DETAILS:
+- Account Role: {role.capitalize()}
+- Mapúa Email / Username: {to_email}
+- Account ID: {account_id}
+- Default Assigned Password: {default_password}
+
+EMAIL VERIFICATION REQUIRED:
+Please verify your email address to activate your account by clicking the link below:
+{verify_link}
+
+Once verified, you can log in to MapúaQ using your credentials here:
+{login_link}
+
+For security, we recommend updating your password upon your first login.
+
+Best regards,
+Mapúa University Registrar Office
+"""
+    body_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="background-color: #800000; color: white; padding: 15px; border-radius: 6px 6px 0 0; text-align: center;">
+            <h2 style="margin: 0;">Welcome to MapúaQ</h2>
+            <p style="margin: 5px 0 0 0; opacity: 0.9;">Account Provisioning &amp; Verification Notice</p>
+        </div>
+        <div style="padding: 20px; background-color: #ffffff;">
+            <p>Dear <strong>{full_name}</strong>,</p>
+            <p>Your official Mapúa Registrar account has been created.</p>
+            
+            <div style="background-color: #f8f9fa; border-left: 4px solid #800000; padding: 15px; margin: 20px 0;">
+                <h4 style="margin-top: 0; color: #800000;">Account Credentials</h4>
+                <p style="margin: 5px 0;"><strong>Role:</strong> {role.capitalize()}</p>
+                <p style="margin: 5px 0;"><strong>Mapúa Email:</strong> {to_email}</p>
+                <p style="margin: 5px 0;"><strong>Student / Account ID:</strong> {account_id}</p>
+                <p style="margin: 5px 0;"><strong>Default Password:</strong> <code style="background-color: #eee; padding: 2px 6px; border-radius: 4px; color: #800000; font-weight: bold;">{default_password}</code></p>
+            </div>
+
+            <div style="background-color: #fff3cd; border: 1px solid #ffeba2; padding: 15px; margin: 20px 0; border-radius: 5px; text-align: center;">
+                <h4 style="margin-top: 0; color: #856404;">✉️ Action Required: Verify Email Address</h4>
+                <p style="margin-bottom: 15px; color: #856404;">Please click the button below to verify your email address and activate your account.</p>
+                <a href="{verify_link}" style="background-color: #800000; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                    ✓ Verify Email Address Now
+                </a>
+            </div>
+
+            <p style="font-size: 0.85rem; color: #777; margin-top: 20px; text-align: center;">
+                Or log in directly at <a href="{login_link}" style="color: #800000;">{login_link}</a>
             </p>
         </div>
     </div>

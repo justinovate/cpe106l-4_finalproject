@@ -93,7 +93,7 @@ def init_db():
             SELECT COALESCE(student_id, 'EMP-' || id), email, password_hash, full_name, role, program_dept, avatar_url, created_at
             FROM users WHERE role IN ('staff', 'admin')
         """)
-    # Migration check: ensure avatar_position, phone_number, and must_change_password exist in staff_users
+    # Migration check: ensure avatar_position, phone_number, must_change_password, email_verified, and verification_token exist in staff_users
     cursor.execute("PRAGMA table_info(staff_users)")
     su_cols = [row[1] for row in cursor.fetchall()]
     if "avatar_position" not in su_cols:
@@ -102,8 +102,12 @@ def init_db():
         cursor.execute("ALTER TABLE staff_users ADD COLUMN phone_number TEXT NULL")
     if "must_change_password" not in su_cols:
         cursor.execute("ALTER TABLE staff_users ADD COLUMN must_change_password INTEGER DEFAULT 0")
+    if "email_verified" not in su_cols:
+        cursor.execute("ALTER TABLE staff_users ADD COLUMN email_verified INTEGER DEFAULT 1")
+    if "verification_token" not in su_cols:
+        cursor.execute("ALTER TABLE staff_users ADD COLUMN verification_token TEXT NULL")
 
-    # Migration check: ensure avatar_position, phone_number, and must_change_password exist in students
+    # Migration check: ensure avatar_position, phone_number, must_change_password, email_verified, and verification_token exist in students
     cursor.execute("PRAGMA table_info(students)")
     st_cols = [row[1] for row in cursor.fetchall()]
     if "avatar_position" not in st_cols:
@@ -112,6 +116,10 @@ def init_db():
         cursor.execute("ALTER TABLE students ADD COLUMN phone_number TEXT NULL")
     if "must_change_password" not in st_cols:
         cursor.execute("ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0")
+    if "email_verified" not in st_cols:
+        cursor.execute("ALTER TABLE students ADD COLUMN email_verified INTEGER DEFAULT 0")
+    if "verification_token" not in st_cols:
+        cursor.execute("ALTER TABLE students ADD COLUMN verification_token TEXT NULL")
 
     # Migration check: ensure skipped_at, rejoin_used, and penalty_offset exist in tickets
     cursor.execute("PRAGMA table_info(tickets)")
@@ -264,7 +272,7 @@ def student_dashboard():
 
     # Fetch fresh student profile details from database
     cursor.execute("""
-        SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at
+        SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at, COALESCE(email_verified, 0)
         FROM students WHERE id = ?
     """, (user_id,))
     u_row = cursor.fetchone()
@@ -285,7 +293,8 @@ def student_dashboard():
         "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
         "avatar_position": u_row[6] or "center",
         "phone_number": u_row[7] or "",
-        "created_at": u_row[8]
+        "created_at": u_row[8],
+        "email_verified": bool(u_row[9])
     }
 
     # Synchronize session state with current database details
@@ -294,6 +303,7 @@ def student_dashboard():
     session["user"]["email"] = user_info["email"]
     session["user"]["avatar_url"] = user_info["avatar_url"]
     session["user"]["avatar_position"] = user_info["avatar_position"]
+    session["user"]["email_verified"] = user_info["email_verified"]
 
     # Fetch active ticket (status = 'WAITING' or 'CALLED')
     cursor.execute("""
@@ -382,7 +392,7 @@ def login():
 
         # Step 1: Check staff_users table for Staff / Admin accounts
         cursor.execute("""
-            SELECT id, employee_id, email, password_hash, full_name, role, program_dept, avatar_url, COALESCE(must_change_password, 0)
+            SELECT id, employee_id, email, password_hash, full_name, role, program_dept, avatar_url, COALESCE(must_change_password, 0), COALESCE(email_verified, 1)
             FROM staff_users
             WHERE lower(email) = lower(?) OR lower(employee_id) = lower(?)
         """, (identifier, identifier))
@@ -390,6 +400,7 @@ def login():
 
         if s_row and check_password_hash(s_row[3], password):
             must_change = bool(s_row[8])
+            email_verified = bool(s_row[9])
             session["user"] = {
                 "id": s_row[0],
                 "student_id": s_row[1],
@@ -401,7 +412,8 @@ def login():
                 "avatar_url": s_row[7] or "/static/uploads/avatars/default.png",
                 "username": s_row[1] or s_row[2],
                 "account_type": "staff_user",
-                "must_change_password": must_change
+                "must_change_password": must_change,
+                "email_verified": email_verified
             }
             conn.close()
 
@@ -414,7 +426,7 @@ def login():
 
         # Step 2: Check students table for Student accounts
         cursor.execute("""
-            SELECT id, student_id, email, password_hash, full_name, program_dept, avatar_url, COALESCE(must_change_password, 0)
+            SELECT id, student_id, email, password_hash, full_name, program_dept, avatar_url, COALESCE(must_change_password, 0), COALESCE(email_verified, 0)
             FROM students
             WHERE lower(email) = lower(?) OR lower(student_id) = lower(?)
         """, (identifier, identifier))
@@ -423,6 +435,7 @@ def login():
 
         if std_row and check_password_hash(std_row[3], password):
             must_change = bool(std_row[7])
+            email_verified = bool(std_row[8])
             session["user"] = {
                 "id": std_row[0],
                 "student_id": std_row[1],
@@ -433,7 +446,8 @@ def login():
                 "avatar_url": std_row[6] or "/static/uploads/avatars/default.png",
                 "username": std_row[1] or std_row[2],
                 "account_type": "student",
-                "must_change_password": must_change
+                "must_change_password": must_change,
+                "email_verified": email_verified
             }
 
             if must_change:
@@ -536,6 +550,98 @@ def change_password():
         return redirect(url_for("student_dashboard"))
 
     return render_template("change_password.html", must_change=must_change, user=session.get("user"))
+
+
+@app.route("/verify-email/<token>")
+def verify_email(token: str):
+    """Verifies student or staff email address using unique verification token."""
+    if not token:
+        flash("Invalid verification link.", "danger")
+        return redirect(url_for("login"))
+
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+
+    # Search in students table
+    cursor.execute("SELECT id, email, full_name FROM students WHERE verification_token = ?", (token,))
+    s_row = cursor.fetchone()
+
+    if s_row:
+        user_id, email, name = s_row
+        cursor.execute("UPDATE students SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+
+        if session.get("user") and session["user"].get("id") == user_id:
+            session["user"]["email_verified"] = True
+
+        flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
+        return redirect(url_for("login"))
+
+    # Search in staff_users table
+    cursor.execute("SELECT id, email, full_name FROM staff_users WHERE verification_token = ?", (token,))
+    su_row = cursor.fetchone()
+
+    if su_row:
+        user_id, email, name = su_row
+        cursor.execute("UPDATE staff_users SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+
+        if session.get("user") and session["user"].get("id") == user_id:
+            session["user"]["email_verified"] = True
+
+        flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
+        return redirect(url_for("login"))
+
+    conn.close()
+    flash("Invalid or expired email verification link.", "danger")
+    return redirect(url_for("login"))
+
+
+@app.route("/resend-verification", methods=["POST"])
+@login_required
+def resend_verification():
+    """Resends email verification notice for active user session."""
+    user_id = session["user"]["id"]
+    user_role = session["user"].get("role", "student")
+    table_name = "students" if user_role == "student" else "staff_users"
+
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT id, email, full_name, student_id, verification_token, email_verified FROM {table_name} WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
+        flash("Account not found.", "danger")
+        return redirect(url_for("login"))
+
+    u_id, email, name, acct_id, v_token, is_verified = row
+
+    if is_verified:
+        conn.close()
+        flash("Your email address is already verified.", "info")
+        return redirect(url_for("student_dashboard") if user_role == "student" else url_for("dashboard"))
+
+    if not v_token:
+        v_token = secrets.token_urlsafe(32)
+        cursor.execute(f"UPDATE {table_name} SET verification_token = ? WHERE id = ?", (v_token, u_id))
+        conn.commit()
+
+    conn.close()
+
+    notifier.send_welcome_account_notice(
+        to_email=email,
+        full_name=name,
+        account_id=acct_id or email,
+        default_password="[Your Existing Password]",
+        verification_token=v_token,
+        role=user_role
+    )
+
+    flash(f"A fresh email verification link has been dispatched to {email}.", "success")
+    return redirect(url_for("student_dashboard") if user_role == "student" else url_for("dashboard"))
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -1318,14 +1424,25 @@ def admin_users():
                     flash(f"Student or Account with Email '{email}' or ID '{student_id}' already exists.", "danger")
                     conn.close()
                 else:
+                    v_token = secrets.token_urlsafe(32)
                     pass_hash = generate_password_hash(password)
                     cursor.execute("""
-                        INSERT INTO students (student_id, email, password_hash, full_name, program_dept, avatar_url, created_at)
-                        VALUES (?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', ?)
-                    """, (student_id, email, pass_hash, full_name, program_dept, time.time()))
+                        INSERT INTO students (student_id, email, password_hash, full_name, program_dept, avatar_url, email_verified, verification_token, created_at)
+                        VALUES (?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
+                    """, (student_id, email, pass_hash, full_name, program_dept, v_token, time.time()))
                     conn.commit()
                     conn.close()
-                    flash(f"Student account '{full_name}' ({email}) successfully created.", "success")
+
+                    notifier.send_welcome_account_notice(
+                        to_email=email,
+                        full_name=full_name,
+                        account_id=student_id,
+                        default_password=password,
+                        verification_token=v_token,
+                        role="student"
+                    )
+
+                    flash(f"Student account '{full_name}' ({email}) successfully created. Verification email dispatched with account details.", "success")
                     return redirect(url_for("admin_users"))
             else:
                 cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
@@ -1337,21 +1454,32 @@ def admin_users():
                     flash(f"Staff account with Email '{email}' or Employee ID '{student_id}' already exists.", "danger")
                     conn.close()
                 else:
+                    v_token = secrets.token_urlsafe(32)
                     pass_hash = generate_password_hash(password)
                     cursor.execute("""
-                        INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', ?)
-                    """, (student_id, email, pass_hash, full_name, role, program_dept, time.time()))
+                        INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, email_verified, verification_token, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
+                    """, (student_id, email, pass_hash, full_name, role, program_dept, v_token, time.time()))
                     conn.commit()
                     conn.close()
-                    flash(f"Staff/Admin account '{full_name}' ({email}) successfully created as {role.upper()}.", "success")
+
+                    notifier.send_welcome_account_notice(
+                        to_email=email,
+                        full_name=full_name,
+                        account_id=student_id,
+                        default_password=password,
+                        verification_token=v_token,
+                        role=role
+                    )
+
+                    flash(f"Staff/Admin account '{full_name}' ({email}) successfully created as {role.upper()}. Verification email dispatched with account details.", "success")
                     return redirect(url_for("admin_users"))
 
     conn = sqlite3.connect(DB)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, employee_id, email, full_name, role, program_dept, created_at FROM staff_users ORDER BY created_at DESC")
+    cursor.execute("SELECT id, employee_id, email, full_name, role, program_dept, created_at, COALESCE(email_verified, 1) FROM staff_users ORDER BY created_at DESC")
     staff_list = cursor.fetchall()
-    cursor.execute("SELECT id, student_id, email, full_name, program_dept, created_at FROM students ORDER BY created_at DESC")
+    cursor.execute("SELECT id, student_id, email, full_name, program_dept, created_at, COALESCE(email_verified, 0) FROM students ORDER BY created_at DESC")
     student_list = cursor.fetchall()
     conn.close()
 

@@ -214,7 +214,7 @@
                                     <th>Student ID</th>
                                     <th>MyMail Email</th>
                                     <th>Student Name</th>
-                                    <th>Program</th>
+                                    <th>Status</th>
                                     <th class="text-end">Action</th>
                                 </tr>
                             </thead>
@@ -225,7 +225,13 @@
                                     <td class="fw-bold">{{ s[1] }}</td>
                                     <td><span class="text-primary">{{ s[2] }}</span></td>
                                     <td class="fw-bold">{{ s[3] }}</td>
-                                    <td><span class="badge bg-light text-dark border">{{ s[4] or 'Student' }}</span></td>
+                                    <td>
+                                        {% if s[7] %}
+                                            <span class="badge bg-success">✓ Verified</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">⚠️ Unverified</span>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end">
                                         <form method="POST" action="/admin/users/{{ s[0] }}/reset-password" class="d-inline">
                                             <input type="hidden" name="target_type" value="student">
