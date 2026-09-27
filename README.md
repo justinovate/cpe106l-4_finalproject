@@ -6,11 +6,9 @@
 [![Tests: 40 Passed](https://img.shields.io/badge/Tests-40%20Passed%20(100%25)-brightgreen.svg)](tests/)
 
 **Course & Section:** CPE106L-4 / Section B2 (Software Design Laboratory)  
-**Institution:** Mapúa University, School of AI, EE, CE, and ECE (AIECEE)  
+**Institution:** Mapúa University, School of Artificial Intelligence, Electrical, Computer, and Electronics Engineering (AIECEE)  
 **Instructor:** Dr. John De Guzman Tarampi  
-**Academic Term:** 1st Term, AY 2026-2027  
-**Lead Software Architect:** Justin Andre De Leon  
-
+**Academic Term:** 1st Term, AY 2026-2027
 ---
 
 ## Quick Navigation
