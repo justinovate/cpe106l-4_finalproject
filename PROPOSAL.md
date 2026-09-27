@@ -92,6 +92,7 @@ To design, implement, and validate **MapuaQ**, a 3-tier web-based student priori
 | **Frontend UI** | HTML5 / Bootstrap 5 | 5.3.0 (CDN) | Responsive UI styled with Mapúa University Cardinal Red accents (`#800000`). |
 | **Testing Framework** | `unittest` | Standard Library | Standard Python testing framework implementing 12 AAA unit/integration tests. |
 | **Analytics Engine** | Matplotlib | 3.11.2 (`Agg` backend) | Headless visualization library for server-side PNG chart rendering. |
+| **Brand Identity** | Scalable Vector Graphics | W3C SVG Standard | Modular transparent vector logos (`logo_icon.svg`, `logo_full.svg`) and favicons. |
 | **Version Control** | Git & GitHub | Git / WSL Ubuntu | Distributed version control and collaborative codebase management. |
 
 ---
@@ -449,6 +450,21 @@ To support immediate verification and testing across administrative system roles
 | **Lead Admin** | Lead Registrar Admin | `admin@mapua.edu.ph` | `MapuaAdmin2026!` | `admin` | Registrar Administration |
 | **Registrar Staff** | Registrar Staff Officer | `registrar@mapua.edu.ph` | `StaffPass2026!` | `registrar` | Registrar Counter |
 | **Students** | *(Provisioned by Admin)* | *(MyMail Institutional)* | *(Secure Hash)* | *(Student ID)* | *(Degree Program)* |
+
+---
+
+### 7.8 Brand Identity & Modular Logo Assets
+
+The MapúaQ visual identity incorporates a dual-purpose logo mark symbolizing both algorithmic structure and operational transparency:
+
+1. **Symbolic Design**:
+   - The magnifying glass frame forms the letter **"Q"** (for MapúaQ).
+   - The inner lens encloses a **Binary Min-Heap Tree Structure** (Gold root node at top with two Cardinal Red child nodes below), visually representing the dynamic priority score ordering and real-time queue lookup.
+2. **Transparent Vector Modularization**:
+   - `static/images/logo_icon.svg`: Standalone Min-Heap Q icon mark (transparent SVG background) utilized for browser favicons, mobile app icons, and compact brand badges.
+   - `static/images/logo_icon_white.svg`: High-contrast white and gold variant for dark Cardinal Red (`#800000`) navigation bars.
+   - `static/images/logo_full.svg`: Full horizontal wordmark ("Mapúa") coupled with the Q icon mark for light headers and print documents.
+   - `static/images/logo_full_white.svg`: Full white and gold horizontal logo mark for dark landing portals and sign-in interfaces.
 
 ---
 

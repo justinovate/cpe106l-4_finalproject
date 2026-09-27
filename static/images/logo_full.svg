@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 180" width="100%" height="100%">
+    <!-- Wordmark "Mapúa" -->
+    <text x="20" y="130" font-family="'Segoe UI', Roboto, Arial, sans-serif" font-weight="800" font-size="115" fill="#800000" letter-spacing="-1">Mapúa</text>
+
+    <!-- Logo Mark Q Icon (Right Aligned) -->
+    <g transform="translate(365, 5)">
+        <!-- Outer Magnifying Glass / Q Ring -->
+        <circle cx="92" cy="92" r="70" fill="none" stroke="#800000" stroke-width="20" />
+        <!-- Magnifying Glass Handle -->
+        <path d="M 142 142 L 180 180" stroke="#800000" stroke-width="24" stroke-linecap="round" />
+        <!-- Min-Heap Tree Edges -->
+        <line x1="92" y1="58" x2="60" y2="114" stroke="#800000" stroke-width="6" stroke-linecap="round" />
+        <line x1="92" y1="58" x2="124" y2="114" stroke="#800000" stroke-width="6" stroke-linecap="round" />
+        <!-- Min-Heap Root Node (Mapúa Gold) -->
+        <circle cx="92" cy="58" r="14" fill="#F59E0B" stroke="#800000" stroke-width="2" />
+        <!-- Min-Heap Child Nodes (Cardinal Red) -->
+        <circle cx="60" cy="114" r="13" fill="#800000" />
+        <circle cx="124" cy="114" r="13" fill="#800000" />
+    </g>
+</svg>
