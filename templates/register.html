@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapuaQ - Student Registration</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-mapua-cardinal { background-color: #800000; }
+        .text-mapua-cardinal { color: #800000; }
+        .btn-mapua-cardinal { background-color: #800000; color: white; border: none; }
+        .btn-mapua-cardinal:hover { background-color: #600000; color: white; }
+    </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-mapua-cardinal shadow-sm">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">
+            MapuaQ <span class="badge bg-warning text-dark fs-6 ms-1">Student Kiosk</span>
+        </a>
+        <a href="/login" class="btn btn-outline-light btn-sm">Sign In</a>
+    </div>
+</nav>
+
+<div class="container py-5" style="max-width: 600px;">
+    <div class="card shadow border-0 rounded-3">
+        <div class="card-header bg-mapua-cardinal text-white text-center py-3">
+            <h4 class="mb-0 fw-bold">Student Account Registration</h4>
+            <small class="text-light opacity-75">Mapúa Institutional MyMail Verification</small>
+        </div>
+        <div class="card-body p-4">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="/register" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Full Name</label>
+                    <input type="text" name="full_name" class="form-control" placeholder="e.g. Juan Dela Cruz" required autofocus>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Student ID Number</label>
+                        <input type="text" name="student_id" class="form-control" placeholder="e.g. 2024180029" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Program / Department</label>
+                        <input type="text" name="program_dept" class="form-control" placeholder="e.g. BS Computer Engineering" required>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Mapúa MyMail Address</label>
+                    <input type="email" name="email" class="form-control" placeholder="username@mymail.mapua.edu.ph" required>
+                    <small class="form-text text-muted">Must end with @mymail.mapua.edu.ph</small>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Password</label>
+                        <input type="password" name="password" class="form-control" placeholder="Create password" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Confirm Password</label>
+                        <input type="password" name="confirm_password" class="form-control" placeholder="Confirm password" required>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Profile Picture (Optional Avatar)</label>
+                    <input type="file" name="avatar" class="form-control" accept="image/png, image/jpeg, image/jpg, image/webp">
+                    <small class="form-text text-muted">Allowed: PNG, JPG, JPEG, WEBP (Max 2MB)</small>
+                </div>
+                <button type="submit" class="btn btn-mapua-cardinal w-100 py-3 fw-bold shadow-sm">
+                    Complete Student Registration
+                </button>
+            </form>
+        </div>
+        <div class="card-footer bg-white text-center py-3 border-0">
+            <p class="mb-0 text-muted">
+                Already registered? 
+                <a href="/login" class="fw-bold text-mapua-cardinal text-decoration-none">Sign In Here</a>
+            </p>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

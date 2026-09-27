@@ -9,6 +9,7 @@
         .bg-mapua-cardinal { background-color: #800000; }
         .text-mapua-cardinal { color: #800000; }
         .border-mapua-cardinal { border-color: #800000 !important; }
+        .avatar-sm { width: 34px; height: 34px; object-fit: cover; }
     </style>
 </head>
 <body class="bg-light">
@@ -28,10 +29,13 @@
                 {% if user and user.role == 'admin' %}
                 <a class="nav-link fw-bold text-warning" href="/admin/users">Manage Staff Accounts</a>
                 {% endif %}
+                <a class="nav-link fw-bold" href="/profile">My Profile</a>
             </div>
             <div class="navbar-nav align-items-center">
-                <span class="navbar-text text-light me-3">
-                    Logged in as <strong>{{ user.full_name }}</strong> <span class="badge bg-light text-dark text-capitalize">{{ user.role }}</span>
+                <span class="navbar-text text-light me-3 d-flex align-items-center">
+                    <img src="{{ user.avatar_url or '/static/uploads/avatars/default.png' }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white">
+                    <strong>{{ user.full_name }}</strong>
+                    <span class="badge bg-light text-dark text-capitalize ms-2">{{ user.role }}</span>
                 </span>
                 <a href="/logout" class="btn btn-outline-light btn-sm fw-bold">Logout</a>
             </div>
@@ -70,11 +74,18 @@
                     <span class="badge bg-info text-dark">Wait Duration: {{ top.elapsed_minutes }} mins</span>
                 </div>
             </div>
-            <form method="POST" action="/call-next">
-                <button type="submit" class="btn btn-success btn-lg px-4 py-3 fw-bold shadow">
-                    Call &amp; Mark Served
-                </button>
-            </form>
+            <div class="d-flex gap-2">
+                <form method="POST" action="/call-next">
+                    <button type="submit" class="btn btn-warning btn-lg px-4 py-3 fw-bold shadow">
+                        📢 Call Ticket
+                    </button>
+                </form>
+                <form method="POST" action="/ticket/{{ top.ticket_id }}/serve">
+                    <button type="submit" class="btn btn-success btn-lg px-4 py-3 fw-bold shadow">
+                        ✓ Mark Served
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
     {% else %}
@@ -150,8 +161,8 @@
                         <th>Student Name</th>
                         <th>Service Request</th>
                         <th style="width: 12%;">Wait Duration</th>
-                        <th style="width: 18%;">Served At</th>
                         <th style="width: 15%;">Served By</th>
+                        <th style="width: 15%;">Student Rating</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -162,8 +173,17 @@
                         <td class="fw-bold">{{ t.full_name }}</td>
                         <td>{{ t.request_type }}</td>
                         <td><span class="badge bg-info text-dark">{{ t.wait_duration }} mins</span></td>
-                        <td><small>{{ t.served_at }}</small></td>
                         <td><span class="badge bg-success">{{ t.served_by }}</span></td>
+                        <td>
+                            {% if t.feedback_rating %}
+                                <span class="badge bg-warning text-dark fs-6">{{ t.feedback_rating }} ★</span>
+                                {% if t.feedback_comment %}
+                                    <small class="d-block text-muted text-truncate" style="max-width: 150px;">"{{ t.feedback_comment }}"</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted small">No feedback</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
                     <tr>
@@ -200,10 +220,12 @@
                         <td>
                             {% if t.status == 'WAITING' %}
                                 <span class="badge bg-warning text-dark">WAITING</span>
+                            {% elif t.status == 'CALLED' %}
+                                <span class="badge bg-info">CALLED</span>
                             {% elif t.status == 'SERVED' %}
                                 <span class="badge bg-success">SERVED</span>
                             {% else %}
-                                <span class="badge bg-info">{{ t.status }}</span>
+                                <span class="badge bg-secondary">{{ t.status }}</span>
                             {% endif %}
                         </td>
                         <td>{{ t.served_by or '—' }}</td>

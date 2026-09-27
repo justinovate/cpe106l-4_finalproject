@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapuaQ - User Profile</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-mapua-cardinal { background-color: #800000; }
+        .text-mapua-cardinal { color: #800000; }
+        .avatar-lg { width: 110px; height: 110px; object-fit: cover; border: 3px solid #800000; }
+        .avatar-sm { width: 36px; height: 36px; object-fit: cover; }
+    </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">
+            MapuaQ <span class="badge bg-warning text-dark fs-6 ms-1">My Account</span>
+        </a>
+        <div class="navbar-nav me-auto">
+            {% if user.role in ('staff', 'admin') %}
+                <a class="nav-link fw-bold" href="/dashboard">Queue Monitor</a>
+                <a class="nav-link fw-bold" href="/analytics">Analytics</a>
+            {% else %}
+                <a class="nav-link fw-bold" href="/checkin">Issue New Ticket</a>
+            {% endif %}
+            <a class="nav-link active fw-bold" href="/profile">My Profile</a>
+        </div>
+        <div class="navbar-nav align-items-center">
+            <span class="navbar-text text-light me-3 d-flex align-items-center">
+                <img src="{{ user.avatar_url }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white">
+                <strong>{{ user.full_name }}</strong>
+                <span class="badge bg-light text-dark text-capitalize ms-2">{{ user.role }}</span>
+            </span>
+            <a href="/logout" class="btn btn-outline-light btn-sm fw-bold">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container pb-5">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="row g-4">
+        <!-- User Info & Avatar Card -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 rounded-3 text-center p-4">
+                <div class="position-relative mx-auto mb-3">
+                    <img src="{{ user_info.avatar_url }}" alt="Profile Avatar" class="rounded-circle avatar-lg shadow-sm">
+                </div>
+                <h4 class="fw-bold text-mapua-cardinal mb-1">{{ user_info.full_name }}</h4>
+                <p class="text-muted mb-2"><span class="badge bg-danger text-capitalize px-3 py-1">{{ user_info.role }}</span></p>
+                <p class="text-secondary small mb-3">{{ user_info.program_dept or 'Mapúa University' }}</p>
+
+                <ul class="list-group list-group-flush text-start small mb-3">
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted fw-bold">Student / Staff ID:</span>
+                        <span class="fw-bold">{{ user_info.student_id or 'N/A' }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted fw-bold">Email Address:</span>
+                        <span class="fw-bold text-break">{{ user_info.email }}</span>
+                    </li>
+                </ul>
+
+                <!-- Change Avatar Form -->
+                <form method="POST" action="/profile" enctype="multipart/form-data" class="mt-2">
+                    <input type="hidden" name="action" value="update_avatar">
+                    <label class="form-label small fw-bold text-muted d-block">Update Profile Picture</label>
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="file" name="avatar" class="form-control" accept="image/png, image/jpeg, image/jpg, image/webp" required>
+                        <button type="submit" class="btn btn-outline-danger">Upload</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Change Password Card -->
+            <div class="card shadow-sm border-0 rounded-3 mt-4 p-4">
+                <h5 class="fw-bold text-mapua-cardinal mb-3">Security &amp; Password</h5>
+                <form method="POST" action="/profile">
+                    <input type="hidden" name="action" value="update_password">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Current Password</label>
+                        <input type="password" name="current_password" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">New Password</label>
+                        <input type="password" name="new_password" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Confirm New Password</label>
+                        <input type="password" name="confirm_password" class="form-control form-control-sm" required>
+                    </div>
+                    <button type="submit" class="btn btn-dark btn-sm w-100 fw-bold">Update Password</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Ticket History Card -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 rounded-3">
+                <div class="card-header bg-mapua-cardinal text-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span>My Queuing Ticket History</span>
+                    <a href="/checkin" class="btn btn-warning btn-sm fw-bold">Issue New Ticket</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Ticket ID</th>
+                                    <th>Service Request</th>
+                                    <th>Status</th>
+                                    <th>Actions / Feedback</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in tickets %}
+                                <tr>
+                                    <td class="fw-bold">#{{ t.id }}</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">{{ t.request_type }}</div>
+                                        <small class="text-muted">Student: {{ t.student_id }}</small>
+                                    </td>
+                                    <td>
+                                        {% if t.status == 'WAITING' %}
+                                            <span class="badge bg-warning text-dark">WAITING</span>
+                                        {% elif t.status == 'CALLED' %}
+                                            <span class="badge bg-info">CALLED</span>
+                                        {% elif t.status == 'SERVED' %}
+                                            <span class="badge bg-success">SERVED</span>
+                                        {% elif t.status == 'CANCELLED' %}
+                                            <span class="badge bg-secondary">CANCELLED</span>
+                                        {% else %}
+                                            <span class="badge bg-dark">{{ t.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="/ticket/{{ t.id }}" class="btn btn-outline-danger btn-sm fw-bold me-1">Track Live</a>
+                                        
+                                        {% if t.status == 'SERVED' %}
+                                            {% if t.feedback_rating %}
+                                                <span class="badge bg-light text-dark border ms-1">Rating: {{ t.feedback_rating }}★</span>
+                                            {% else %}
+                                                <button class="btn btn-sm btn-outline-success fw-bold" data-bs-toggle="collapse" data-bs-target="#feedbackForm{{ t.id }}">Rate Service</button>
+                                                <div class="collapse mt-2" id="feedbackForm{{ t.id }}">
+                                                    <form method="POST" action="/ticket/{{ t.id }}/feedback" class="p-2 border rounded bg-light">
+                                                        <select name="rating" class="form-select form-select-sm mb-1" required>
+                                                            <option value="5">5 ★★★★★ (Excellent)</option>
+                                                            <option value="4">4 ★★★★☆ (Good)</option>
+                                                            <option value="3">3 ★★★☆☆ (Satisfactory)</option>
+                                                            <option value="2">2 ★★☆☆☆ (Needs Improvement)</option>
+                                                            <option value="1">1 ★☆☆☆☆ (Poor)</option>
+                                                        </select>
+                                                        <input type="text" name="comment" class="form-control form-control-sm mb-1" placeholder="Optional comments...">
+                                                        <button type="submit" class="btn btn-success btn-sm w-100">Submit Rating</button>
+                                                    </form>
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">
+                                        No tickets found in your account history.
+                                        <div class="mt-2"><a href="/checkin" class="btn btn-sm btn-outline-danger">Check-In Now</a></div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

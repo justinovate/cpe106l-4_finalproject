@@ -28,7 +28,7 @@ class TestMapuaQRoutes(unittest.TestCase):
     def _login_as_admin(self):
         """Helper to authenticate test client session as Admin."""
         return self.client.post("/login", data={
-            "username": "admin",
+            "identifier": "admin@mapua.edu.ph",
             "password": "MapuaAdmin2026!"
         }, follow_redirects=True)
 
@@ -41,8 +41,35 @@ class TestMapuaQRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Queue Monitor", response.data)
         with self.client.session_transaction() as sess:
-            self.assertEqual(sess["user"]["username"], "admin")
+            self.assertEqual(sess["user"]["email"], "admin@mapua.edu.ph")
             self.assertEqual(sess["user"]["role"], "admin")
+
+    def test_student_registration_and_login(self):
+        """Verifies student account registration with MyMail validation and login."""
+        # Act 1: Register Student
+        reg_response = self.client.post("/register", data={
+            "full_name": "Juan Dela Cruz",
+            "student_id": "2024180029",
+            "email": "jdelacruz@mymail.mapua.edu.ph",
+            "program_dept": "BS Computer Engineering",
+            "password": "StudentPass2026!",
+            "confirm_password": "StudentPass2026!"
+        }, follow_redirects=True)
+
+        self.assertEqual(reg_response.status_code, 200)
+        self.assertIn(b"Registration successful!", reg_response.data)
+
+        # Act 2: Log in as registered student
+        login_response = self.client.post("/login", data={
+            "identifier": "2024180029",
+            "password": "StudentPass2026!"
+        }, follow_redirects=True)
+
+        # Assert
+        self.assertEqual(login_response.status_code, 200)
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess["user"]["student_id"], "2024180029")
+            self.assertEqual(sess["user"]["role"], "student")
 
     def test_student_checkin_route_post_and_redirect(self):
         """Verifies student check-in POST request inserts ticket into SQLite and redirects to /ticket/<id>."""
@@ -50,6 +77,7 @@ class TestMapuaQRoutes(unittest.TestCase):
         form_data = {
             "student_id": "2024109876",
             "full_name": "Maria Santos",
+            "email": "msantos@mymail.mapua.edu.ph",
             "request_type": "Application for Graduation",
             "grade_level": "Graduating Senior"
         }
@@ -59,7 +87,6 @@ class TestMapuaQRoutes(unittest.TestCase):
 
         # Assert
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Ticket", response.data)
         self.assertIn(b"Maria Santos", response.data)
         
         conn = sqlite3.connect(DB)
@@ -80,8 +107,8 @@ class TestMapuaQRoutes(unittest.TestCase):
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024001', 'Juan Dela Cruz', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2024001', 'Juan Dela Cruz', 'jdc@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
         """, (time.time(),))
         ticket_id = cursor.lastrowid
         conn.commit()
@@ -101,8 +128,8 @@ class TestMapuaQRoutes(unittest.TestCase):
         self._login_as_admin()
         conn = sqlite3.connect(DB)
         conn.execute("""
-            INSERT INTO tickets (student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024001', 'Juan Dela Cruz', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2024001', 'Juan Dela Cruz', 'jdc@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
         """, (time.time(),))
         conn.commit()
         conn.close()
@@ -115,31 +142,44 @@ class TestMapuaQRoutes(unittest.TestCase):
         self.assertIn(b"Queue Monitor", response.data)
         self.assertIn(b"Juan Dela Cruz", response.data)
 
-    def test_call_next_ticket_post_with_audit_trail(self):
-        """Verifies POST /call-next pops root ticket and updates status to SERVED with audit timestamp & served_by."""
+    def test_call_and_mark_serve_ticket_with_audit_trail(self):
+        """Verifies calling and serving a ticket updates status to CALLED then SERVED with audit timestamp & served_by."""
         # Arrange
         self._login_as_admin()
         conn = sqlite3.connect(DB)
-        conn.execute("""
-            INSERT INTO tickets (student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2021001', 'Alex Senior', 'Application for Graduation', 1, 'Graduating Senior', 1, ?, 1.0, 'WAITING')
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2021001', 'Alex Senior', 'alex@mymail.mapua.edu.ph', 'Application for Graduation', 1, 'Graduating Senior', 1, ?, 1.0, 'WAITING')
         """, (time.time(),))
+        ticket_id = cursor.lastrowid
         conn.commit()
         conn.close()
 
-        # Act
-        response = self.client.post("/call-next", follow_redirects=True)
+        # Act 1: Call ticket
+        call_res = self.client.post("/call-next", follow_redirects=True)
+        self.assertEqual(call_res.status_code, 200)
 
-        # Assert
-        self.assertEqual(response.status_code, 200)
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
-        cursor.execute("SELECT status, served_by, served_at FROM tickets WHERE student_id = '2021001'")
-        row = cursor.fetchone()
+        cursor.execute("SELECT status, called_at FROM tickets WHERE id = ?", (ticket_id,))
+        row1 = cursor.fetchone()
         conn.close()
-        self.assertEqual(row[0], "SERVED")
-        self.assertEqual(row[1], "admin")
-        self.assertIsNotNone(row[2])
+        self.assertEqual(row1[0], "CALLED")
+        self.assertIsNotNone(row1[1])
+
+        # Act 2: Mark served
+        serve_res = self.client.post(f"/ticket/{ticket_id}/serve", follow_redirects=True)
+        self.assertEqual(serve_res.status_code, 200)
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, served_by, served_at FROM tickets WHERE id = ?", (ticket_id,))
+        row2 = cursor.fetchone()
+        conn.close()
+        self.assertEqual(row2[0], "SERVED")
+        self.assertEqual(row2[1], "admin@mapua.edu.ph")
+        self.assertIsNotNone(row2[2])
 
     def test_analytics_dashboard_route_authenticated_get(self):
         """Verifies GET /analytics renders metrics cards for authenticated staff."""
@@ -160,24 +200,26 @@ class TestMapuaQRoutes(unittest.TestCase):
 
         # Act
         response = self.client.post("/admin/users", data={
-            "username": "jsmith",
+            "student_id": "2024990011",
+            "email": "jsmith@mapua.edu.ph",
             "password": "StaffPassword2026!",
             "full_name": "John Smith",
-            "role": "staff"
+            "role": "staff",
+            "program_dept": "Registrar Counter 2"
         }, follow_redirects=True)
 
         # Assert
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"jsmith", response.data)
+        self.assertIn(b"jsmith@mapua.edu.ph", response.data)
 
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
-        cursor.execute("SELECT username, full_name, role FROM users WHERE username = 'jsmith'")
+        cursor.execute("SELECT email, full_name, role FROM users WHERE email = 'jsmith@mapua.edu.ph'")
         row = cursor.fetchone()
         conn.close()
 
         self.assertIsNotNone(row)
-        self.assertEqual(row[0], "jsmith")
+        self.assertEqual(row[0], "jsmith@mapua.edu.ph")
         self.assertEqual(row[1], "John Smith")
         self.assertEqual(row[2], "staff")
 

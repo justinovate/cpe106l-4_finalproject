@@ -11,22 +11,37 @@
         .btn-mapua-cardinal { background-color: #800000; color: white; border: none; }
         .btn-mapua-cardinal:hover { background-color: #600000; color: white; }
         .card-hover:hover { transform: translateY(-5px); transition: transform 0.2s ease-in-out; }
+        .avatar-sm { width: 34px; height: 34px; object-fit: cover; }
     </style>
 </head>
 <body class="bg-light d-flex flex-column min-vh-100">
 
-<nav class="navbar navbar-dark bg-mapua-cardinal shadow-sm">
+<nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm">
     <div class="container">
         <a class="navbar-brand fw-bold" href="/">
             MapuaQ <span class="badge bg-warning text-dark fs-6 ms-1">Registrar Priority System</span>
         </a>
+        <div class="navbar-nav ms-auto align-items-center">
+            {% if user %}
+                <span class="navbar-text text-light me-3 d-flex align-items-center">
+                    <img src="{{ user.avatar_url }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white">
+                    <strong>{{ user.full_name }}</strong>
+                    <span class="badge bg-light text-dark text-capitalize ms-2">{{ user.role }}</span>
+                </span>
+                <a href="/profile" class="btn btn-outline-light btn-sm me-2">My Profile</a>
+                <a href="/logout" class="btn btn-outline-warning btn-sm">Logout</a>
+            {% else %}
+                <a href="/login" class="btn btn-outline-light btn-sm me-2">Sign In</a>
+                <a href="/register" class="btn btn-warning btn-sm fw-bold">Register</a>
+            {% endif %}
+        </div>
     </div>
 </nav>
 
 <div class="container my-auto py-5">
     <div class="text-center mb-5">
         <h1 class="display-5 fw-bold text-mapua-cardinal">Welcome to MapuaQ</h1>
-        <p class="lead text-muted">Mapúa University Registrar Priority Queuing & Scheduling Portal</p>
+        <p class="lead text-muted">Mapúa University Registrar Priority Queuing &amp; Scheduling Portal</p>
     </div>
 
     <div class="row g-4 justify-content-center">
