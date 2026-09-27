@@ -5,15 +5,9 @@
 **Instructor:** Dr. John De Guzman Tarampi  
 **Academic Term:** 1st Term, AY 2026-2027  
 
-**Project Team & Specialized Roles (Team of 4):**
-- **Justin Andre De Leon** — Lead Software Architect & Core Backend Developer  
-  *Responsibilities: System design, Flask web routing architecture, Strategy Design Pattern implementation, and overall integration.*
-- **Hannah Grace Duldulao** — Algorithm & Queueing Specialist  
-  *Responsibilities: Binary Min-Heap mechanics (`heap_queue.py`), dynamic priority aging formula implementation, priority weighting matrix, and tie-breaking algorithms.*
-- **Matt Eugene Hilado** — Data Engineer & UI/UX Designer  
-  *Responsibilities: SQLite database schema (`schema.sql`), timestamp persistence, Bootstrap 5 templates (`checkin.html`, `dashboard.html`, `analytics.html`), and Matplotlib analytics integration (`analytics.py`).*
-- **Wilhelm Ferrer** — Systems Analyst & QA Lead  
-  *Responsibilities: GitHub Kanban backlog management, `unittest` AAA test suites (`test_heap.py`, `test_app.py`), software quality assurance, and sprint documentation.*
+**Project Author & Lead Architect:**
+- **Justin Andre De Leon** — Sole Lead Software Architect, Core Systems Engineer & Full-Stack Developer  
+  *Responsibilities: Full end-to-end system design, Flask web controller architecture, Binary Min-Heap algorithm mechanics (`heap_queue.py`), Strategy Design Pattern dynamic priority aging formula implementation, SQLite relational database schema & migrations (`schema.sql`), Bootstrap 5 responsive UI templates, Matplotlib analytics engine (`analytics.py`), institutional MyMail authentication with profile avatar uploads, live ticket tracking system (`/ticket/<id>`), and `unittest` AAA automated test suite (`tests/`).*
 
 ---
 
@@ -21,7 +15,9 @@
 
 **MapuaQ** is an algorithmic, web-based student priority queuing system designed for the Mapúa University Registrar Office. Traditional First-Come, First-Served (FCFS) queuing mechanisms fail during peak academic periods because routine inquiries block time-sensitive institutional requests (such as graduation clearances and subject dropping deadlines). Conversely, static priority queues introduce severe **queue starvation**, where lower-priority tickets are repeatedly preempted by incoming higher-priority tickets and never served.
 
-MapuaQ resolves both operational challenges by integrating an in-memory **Binary Min-Heap** data structure ($O(\log N)$ insertions/deletions and $O(1)$ root lookup) with **Dynamic Priority Aging**. Utilizing the **Strategy Design Pattern**, MapuaQ evaluates priority scores based on a weighted formula ($60\%$ service request urgency and $40\%$ academic standing) while continuously deducting priority score points as waiting time elapses ($\Delta t$). This guarantees mathematically bounded waiting times and eliminates queue starvation while ensuring urgent institutional requests receive immediate service.
+MapuaQ resolves both operational challenges by integrating an in-memory **Binary Min-Heap** data structure ($O(\log N)$ insertions/deletions and $O(1)$ root lookup) with **Dynamic Priority Aging**. Utilizing the **Strategy Design Pattern**, MapuaQ evaluates priority scores based on a weighted formula ($60\%$ service request urgency and $40\%$ academic standing) while continuously deducting priority score points as waiting time elapses ($\Delta t$). 
+
+In addition to core queue scheduling, MapuaQ implements a comprehensive **Role-Based Access Control (RBAC)** architecture supporting Student, Registrar Staff, and Administrator roles. Students authenticate using official Mapúa MyMail (`@mymail.mapua.edu.ph`) or Student ID, upload profile avatars, track live ticket status on a dedicated tracking page with 10-second auto-refresh, and submit post-service 1–5 star ratings. Registrar Staff and Administrators manage queues, call tickets, view visual volume analytics, and maintain a complete servicing audit trail (`called_at`, `served_at`, `served_by`).
 
 ---
 
@@ -33,7 +29,7 @@ In standard registrar operations at Mapúa University, students receive sequenti
 ### 2.2 The Vulnerability of Static Priority Queuing: Queue Starvation
 To address FCFS inefficiencies, traditional systems implement static priority queues where transactions are assigned fixed numerical ranks. However, static priority systems suffer from **queue starvation** (also known as indefinite postponement). In a busy registrar environment, lower-priority tickets (e.g., a Freshman requesting a Certificate of Enrollment) are continuously pushed back as higher-priority tickets (e.g., Graduating Seniors submitting clearance) enter the queue. Under high transaction volume, lower-priority students may wait indefinitely without ever reaching the front of the queue.
 
-### 2.3 The MapuaQ Algorithmic Solution
+### 2.3 The MapuaQ Algorithmic & Architectural Solution
 MapuaQ introduces **Dynamic Priority Aging** into a **Binary Min-Heap** queue engine. By computing a student's priority score as a function of static request weights, academic standing weights, and elapsed waiting time ($\Delta t$), the system dynamically decreases a ticket's numerical score over time. Because the Min-Heap maintains the lowest numerical score at index 0 (root node), waiting tickets gradually age up in priority. This hybrid approach ensures that urgent requests receive high initial priority while guaranteeing that long-waiting students eventually reach root priority, eliminating starvation.
 
 ---
@@ -41,14 +37,16 @@ MapuaQ introduces **Dynamic Priority Aging** into a **Binary Min-Heap** queue en
 ## 3. Objectives
 
 ### 3.1 Primary Objective
-To design, implement, and validate **MapuaQ**, a 3-tier web-based student priority queuing system for Mapúa University Registrar that optimizes service scheduling by combining a Binary Min-Heap algorithm with dynamic priority aging and Strategy Design Pattern architecture.
+To design, implement, and validate **MapuaQ**, a 3-tier web-based student priority queuing system for Mapúa University Registrar that optimizes service scheduling by combining a Binary Min-Heap algorithm with dynamic priority aging, Strategy Design Pattern architecture, institutional account authentication, live ticket tracking, and service quality feedback.
 
 ### 3.2 Specific Measurable Objectives
 1. **Algorithmic Scheduling Engine**: Implement an in-memory Binary Min-Heap priority queue achieving $O(1)$ root lookup for the top-priority ticket (lowest numerical score) and $O(\log N)$ push/pop time complexity.
 2. **Strategy Design Pattern Architecture**: Implement the behavioral Strategy Pattern to decouple priority calculation formulas from heap queue operations, allowing modular rule updates.
-3. **Relational Data Persistence**: Design an SQLite schema (`students_queue.db`) storing Unix epoch timestamps (`REAL NOT NULL`) to ensure exact arrival time persistence and continuous dynamic aging across system reloads.
-4. **Automated Testing & Verification**: Construct a comprehensive test suite in `unittest` (`test_heap.py`, `test_app.py`) using the Arrange-Act-Assert (AAA) pattern to verify heap root invariants, exact score calculations, starvation prevention via aging, route integration, and tie-breaking logic.
-5. **Visual Queue Analytics**: Develop a Matplotlib analytics module (`analytics.py`) utilizing the non-interactive `Agg` backend to render real-time queue volume breakdowns and priority score distribution charts.
+3. **Institutional Authentication & User Profiles**: Implement secure authentication (`werkzeug.security` password hashing) accepting Mapúa MyMail (`@mymail.mapua.edu.ph`) or Student ID, with filesystem avatar uploads (`static/uploads/avatars/`) and user profile management (`/profile`).
+4. **Student Live Ticket Status & Feedback Tracking**: Create a dedicated student tracking page (`/ticket/<id>`) featuring 10-second auto-refresh, position ahead counters, estimated wait times, and post-service 1–5 star rating submission.
+5. **Relational Data Persistence & Audit Trail**: Design an SQLite schema (`students_queue.db`) storing Unix epoch timestamps (`REAL NOT NULL`) to ensure exact arrival time persistence, continuous dynamic aging, and complete servicing audit logging (`called_at`, `served_at`, `served_by`).
+6. **Automated Testing & Verification**: Construct a comprehensive 12-test suite in `unittest` (`test_heap.py`, `test_app.py`) using the Arrange-Act-Assert (AAA) pattern to verify heap root invariants, exact score calculations, starvation prevention, session authentication, avatar uploads, and servicing audit trails.
+7. **Visual Queue Analytics**: Develop a Matplotlib analytics module (`analytics.py`) utilizing the non-interactive `Agg` backend to render real-time queue volume breakdowns and priority score distribution charts.
 
 ---
 
@@ -56,26 +54,28 @@ To design, implement, and validate **MapuaQ**, a 3-tier web-based student priori
 
 | User Role | Interface / View | Key Responsibilities & Capabilities |
 | :--- | :--- | :--- |
-| **Student** | Kiosk Check-In (`/`) | Selects request category and academic year level; submits student ID and name; receives immediate on-screen ticket confirmation. |
-| **Registrar Staff** | Staff Dashboard (`/dashboard`) | Monitors live waiting queue ordered by Min-Heap priority; views root ticket ("Now Serving"); clicks "Call & Mark Served" to dispatch tickets. |
-| **Administrator** | Analytics Dashboard (`/analytics`) | Inspects real-time visual metrics (queue volume by request type/status and priority score distribution histograms) for operational planning. |
+| **Student** | Kiosk Check-In (`/checkin`), Ticket Tracker (`/ticket/<id>`), Profile (`/profile`) | Registers with Mapúa MyMail; uploads profile avatar; submits priority tickets for 15 registrar services; tracks live status with position ahead counters; submits 1–5 star service ratings. |
+| **Registrar Staff** | Staff Dashboard (`/dashboard`) | Authenticates via employee credentials; monitors live queue ordered by Min-Heap priority; calls tickets (`status='CALLED'`); marks tickets served (`status='SERVED'`); inspects servicing audit trails and student rating feedback. |
+| **Administrator** | User Management (`/admin/users`), Analytics (`/analytics`) | Provisions staff and administrator user accounts; inspects real-time queue volume metrics and priority distribution histograms. |
 
 ---
 
 ## 5. Scope and Limitations
 
 ### 5.1 In-Scope Features
-- **Student Kiosk Web Interface**: Input validation for student ID, name, request category, and academic standing.
+- **Institutional Registration & Authentication**: Student registration with `@mymail.mapua.edu.ph` validation, Student ID format checks, and secure password hashing.
+- **Filesystem Avatar Upload Engine**: Uploads profile pictures to `static/uploads/avatars/` with sanitized, timestamped unique filenames.
+- **Student Live Ticket Tracking**: Auto-refreshing status page (`/ticket/<id>`) displaying students ahead, estimated wait time, and live status badges (`WAITING`, `CALLED`, `SERVED`).
+- **Post-Service Rating Feedback**: Enables students to rate completed transactions (1 to 5 stars) with optional comments.
 - **Dynamic Priority Scoring Engine**: Weighted multi-criteria calculation ($60\%$ request weight, $40\%$ standing weight) combined with dynamic aging discounts ($-1.0$ point per 15 elapsed minutes).
 - **Binary Min-Heap Queue Engine**: In-memory priority queue (`RegistrarMinHeapQueue`) enforcing $O(1)$ root element inspection and $O(\log N)$ heap updates.
-- **Persistent Data Layer**: SQLite relational database tracking ticket states (`'WAITING'`, `'SERVED'`) and exact epoch arrival timestamps.
-- **Staff Queue Monitor Dashboard**: Real-time queue table displaying heap positions, calculated scores, and elapsed wait times ($\Delta t$).
+- **Persistent Data Layer & Audit Logging**: SQLite database tracking ticket states (`WAITING`, `CALLED`, `SERVED`, `SKIPPED`, `CANCELLED`), completion timestamps (`served_at`), and staff IDs (`served_by`).
+- **Staff Queue Monitor Dashboard**: Real-time queue table displaying heap positions, priority scores, wait times, and servicing history tabs.
 - **Visual Analytics Module**: Automated Matplotlib PNG chart generation for queue volume and priority distributions.
 
 ### 5.2 Project Limitations
-- **Simulated Status Display**: To ensure 100% offline demonstration stability during evaluation, notification updates are displayed on-screen rather than sending live SMS or SMTP emails (eliminating external API key dependencies).
-- **Route-Based Access Control**: Application endpoints use direct Flask route navigation rather than multi-tenant OAuth/session login, maintaining focus on core data structures and architectural design patterns.
-- **Queue Management Focus**: Handles queue prioritization and status tracking only; does not process financial cashier payments or handle digital document uploads.
+- **On-Screen Live Polling**: Notification updates and calling statuses are displayed on-screen via auto-refreshing web views (`/ticket/<id>`) rather than sending external SMS/SMTP emails, eliminating third-party API dependencies and guaranteeing 100% offline demonstration stability.
+- **Queue Scheduling Boundary**: System scope is focused on registrar queue prioritization, status tracking, and volume analytics; it does not process financial cashier payments or handle digital document attachments.
 
 ---
 
@@ -87,9 +87,10 @@ To design, implement, and validate **MapuaQ**, a 3-tier web-based student priori
 | **Web Framework** | Flask | 3.1.3 | Lightweight WSGI web framework for HTTP routing and controller logic. |
 | **Data Structure** | Python `heapq` / OOP | Standard Library | Provides efficient C-optimized binary heap algorithms for queue management. |
 | **Design Pattern** | Strategy Pattern | Behavioral Pattern | Decouples scoring calculation formulas from queue data structures. |
+| **Security & Auth** | Werkzeug Security | 3.1.8 | PBKDF2/bcrypt password hashing and `secure_filename` upload sanitization. |
 | **Database Engine** | SQLite3 | Standard Library | Embedded zero-configuration SQL database engine (`students_queue.db`). |
-| **Frontend UI** | HTML5 / Bootstrap 5 | 5.3.0 (CDN) | Responsive, mobile-friendly UI styled with Mapúa University Cardinal Red accents. |
-| **Testing Framework** | `unittest` | Standard Library | Standard Python testing framework implementing AAA unit tests. |
+| **Frontend UI** | HTML5 / Bootstrap 5 | 5.3.0 (CDN) | Responsive UI styled with Mapúa University Cardinal Red accents (`#800000`). |
+| **Testing Framework** | `unittest` | Standard Library | Standard Python testing framework implementing 12 AAA unit/integration tests. |
 | **Analytics Engine** | Matplotlib | 3.11.2 (`Agg` backend) | Headless visualization library for server-side PNG chart rendering. |
 | **Version Control** | Git & GitHub | Git / WSL Ubuntu | Distributed version control and collaborative codebase management. |
 
@@ -109,7 +110,7 @@ Where:
 - Aging factor $\frac{\Delta t}{15.0}$ deducts $1.0$ point from the score for every 15 minutes spent in queue.
 - Final priority score is bounded at a minimum value of $0.10$.
 
-#### Weighting Matrix Assignment
+#### Official Mapúa Registrar 15-Service Weighting Matrix
 
 | Request Category ($W_{\text{request}}$) | Weight | Academic Year Level ($W_{\text{standing}}$) | Weight |
 | :--- | :---: | :--- | :---: |
@@ -140,25 +141,31 @@ Where:
 
 ```mermaid
 graph TD
-    Start(["Student Arrives at Kiosk"]) --> CheckInForm["Fill Check-In Form (Student ID, Name, Request, Standing)"]
-    CheckInForm --> Submit["Submit POST /"]
+    Start(["Student Arrives / Opens Kiosk"]) --> RegCheck{"Logged In Student?"}
+    RegCheck -- No --> RegisterStudent["Register / Sign In with Mapúa MyMail"]
+    RegCheck -- Yes --> CheckInForm["Fill Check-In Form (Student ID, Name, Request, Standing)"]
+    RegisterStudent --> CheckInForm
+    CheckInForm --> Submit["Submit POST /checkin"]
     Submit --> LookupWeights["Lookup Request Weight (W_req) & Standing Weight (W_std)"]
     LookupWeights --> CaptureTimestamp["Capture Epoch Timestamp (arrival_timestamp)"]
     CaptureTimestamp --> CalcInitialScore["Strategy Pattern: Calculate Initial Priority Score (S)"]
     CalcInitialScore --> SaveDB[("SQLite DB: INSERT INTO tickets (status='WAITING')")]
-    SaveDB --> TicketSuccess["Render Check-In Success Page"]
-    
+    SaveDB --> RedirectTicket["Redirect to GET /ticket/<id>"]
+    RedirectTicket --> StudentTracker["Live Ticket Status Tracker (Auto-Refreshes 10s)"]
+
     note1["Staff opens /dashboard"] -.-> FetchWaiting
     FetchWaiting[("SQLite DB: SELECT tickets WHERE status='WAITING'")] --> InstantiateHeap["Load into RegistrarMinHeapQueue"]
     InstantiateHeap --> ApplyAging["Recalculate Dynamic Aging: S = Base - (delta_t / 15.0)"]
     ApplyAging --> Reheapify["re-heapify Min-Heap (Index 0 = Root/Lowest Score)"]
-    Reheapify --> RenderDashboard["Display Dashboard (Root = 'Now Serving', Table = Heap Order)"]
+    Reheapify --> RenderDashboard["Display Dashboard (Active Waiting Queue)"]
+
+    RenderDashboard --> CallAction["Staff Clicks 'Call Ticket'"]
+    CallAction --> UpdateCalled[("SQLite DB: UPDATE tickets SET status='CALLED', called_at=time.time()")]
+    UpdateCalled --> StudentNotice["Student Status Page Displays: 'NOW SERVING'"]
     
-    RenderDashboard --> StaffAction{"Staff Clicks 'Call & Mark Served'"}
-    StaffAction --> PopRoot["pop_highest_priority() Root Ticket"]
-    PopRoot --> UpdateDB[("SQLite DB: UPDATE tickets SET status='SERVED' WHERE id = ?")]
-    UpdateDB --> RedirectDashboard["Redirect to /dashboard"]
-    RedirectDashboard --> RenderDashboard
+    RenderDashboard --> ServeAction["Staff Clicks 'Mark Served'"]
+    ServeAction --> UpdateServed[("SQLite DB: UPDATE tickets SET status='SERVED', served_at=time.time(), served_by=email")]
+    UpdateServed --> StudentRating["Student Submits 1-5 Star Rating & Feedback"]
 ```
 
 ---
@@ -174,20 +181,28 @@ graph LR
     end
 
     subgraph MapuaQ System Boundary
-        UC1["UC-01: Check-In Ticket"]
-        UC2["UC-02: Calculate Priority Score"]
-        UC3["UC-03: View Queue Monitor"]
-        UC4["UC-04: Call / Serve Ticket"]
-        UC5["UC-05: View Queue Analytics"]
+        UC1["UC-01: Register & Profile Management"]
+        UC2["UC-02: Check-In Ticket"]
+        UC3["UC-03: Calculate Priority Score"]
+        UC4["UC-04: Track Live Ticket Status"]
+        UC5["UC-05: Submit Service Feedback"]
+        UC6["UC-06: View Queue Monitor Dashboard"]
+        UC7["UC-07: Call / Serve Ticket"]
+        UC8["UC-08: View Queue Analytics"]
+        UC9["UC-09: Manage Staff Accounts"]
     end
 
     S --> UC1
-    UC1 -. "<<include>>" .-> UC2
-    RS --> UC3
-    RS --> UC4
-    RS --> UC5
-    A --> UC3
-    A --> UC5
+    S --> UC2
+    UC2 -. "<<include>>" .-> UC3
+    S --> UC4
+    S --> UC5
+    RS --> UC6
+    RS --> UC7
+    RS --> UC8
+    A --> UC6
+    A --> UC8
+    A --> UC9
 ```
 
 ---
@@ -196,6 +211,18 @@ graph LR
 
 ```mermaid
 classDiagram
+    class User {
+        +int id
+        +string student_id
+        +string email
+        +string password_hash
+        +string full_name
+        +string role
+        +string program_dept
+        +string avatar_url
+        +float created_at
+    }
+
     class StudentTicket {
         +int ticket_id
         +string student_id
@@ -233,6 +260,7 @@ classDiagram
     PriorityCalculationStrategy <|.. StandardRegistrarStrategy : implements
     RegistrarMinHeapQueue o-- StudentTicket : aggregates
     RegistrarMinHeapQueue --> PriorityCalculationStrategy : uses
+    User "1" -- "0..*" StudentTicket : submits / owns
 ```
 
 ---
@@ -249,33 +277,42 @@ sequenceDiagram
     participant Heap as RegistrarMinHeapQueue
     actor Staff as Registrar Staff
 
-    %% Student Check-In Flow
-    Student->>App: POST / (student_id, full_name, request_type, grade_level)
+    %% Student Check-In & Live Tracking Flow
+    Student->>App: POST /checkin (student_id, full_name, email, request_type, grade_level)
     App->>Strategy: calculate_score(req_w, lvl_w, arrival_ts)
     Strategy-->>App: Return initial priority score (S)
     App->>DB: INSERT INTO tickets (..., arrival_timestamp, priority_score, status='WAITING')
-    DB-->>App: Confirm row inserted (ticket_id)
-    App-->>Student: Render checkin.html (Success Ticket Alert)
+    DB-->>App: Confirm ticket row inserted (ticket_id)
+    App-->>Student: Redirect GET /ticket/<ticket_id>
+    Student->>App: GET /ticket/<ticket_id> (Auto-refreshes 10s)
+    App-->>Student: Render ticket_status.html (Students Ahead & Est. Wait Time)
 
-    %% Staff Queue Monitor & Dispatch Flow
+    %% Staff Queue Monitor & Call Flow
     Staff->>App: GET /dashboard
     App->>DB: SELECT * FROM tickets WHERE status='WAITING'
-    DB-->>App: Return list of active ticket records
+    DB-->>App: Return active ticket records
     App->>Heap: Instantiate & push(ticket)
-    Heap->>Strategy: calculate_score(...) [calculates delta_t aging]
-    Strategy-->>Heap: Return updated priority score
+    Heap->>Strategy: calculate_score(...) [computes dynamic aging]
+    Strategy-->>Heap: Return updated score
     App->>Heap: refresh_scores() & heapify()
     App->>Heap: peek() & get_sorted_list()
-    Heap-->>App: Return top ticket (root at index 0) & sorted list
-    App-->>Staff: Render dashboard.html (Now Serving & Queue Table)
+    Heap-->>App: Return root ticket & sorted list
+    App-->>Staff: Render dashboard.html (Active Queue & Window Counter)
 
-    %% Call Next Ticket Flow
+    %% Call & Serve Ticket Flow
     Staff->>App: POST /call-next
-    App->>Heap: peek()
-    Heap-->>App: Return top_ticket (ticket_id)
-    App->>DB: UPDATE tickets SET status='SERVED' WHERE id = top_ticket.id
+    App->>DB: UPDATE tickets SET status='CALLED', called_at=time.time() WHERE id=top.id
+    DB-->>App: Confirm row updated
+    Staff->>App: POST /ticket/<id>/serve
+    App->>DB: UPDATE tickets SET status='SERVED', served_at=time.time(), served_by=email
     DB-->>App: Confirm row updated
     App-->>Staff: Redirect GET /dashboard
+
+    %% Student Feedback Submission
+    Student->>App: POST /ticket/<id>/feedback (rating=5, comment="Fast service!")
+    App->>DB: UPDATE tickets SET feedback_rating=5, feedback_comment=... WHERE id=<id>
+    DB-->>App: Confirm feedback saved
+    App-->>Student: Render ticket_status.html (Feedback Thank You)
 ```
 
 ---
@@ -284,34 +321,80 @@ sequenceDiagram
 
 ```mermaid
 erDiagram
+    USERS ||--o{ TICKETS : "submits / owns"
+    USERS {
+        int id PK "AUTOINCREMENT Primary Key"
+        string student_id "Unique Student/Employee Number"
+        string email "Unique Mapúa Email (@mymail.mapua.edu.ph)"
+        string password_hash "PBKDF2 Password Hash"
+        string full_name "User Full Name"
+        string role "User Role ('student', 'staff', 'admin')"
+        string program_dept "Degree Program / Department"
+        string avatar_url "Relative Path to Avatar File"
+        float created_at "Registration Unix Timestamp"
+    }
+
     TICKETS {
         int id PK "AUTOINCREMENT Primary Key"
-        string student_id "Mapúa Student Number"
+        int user_id FK "References USERS.id"
+        string student_id "Student Number"
         string full_name "Student Full Name"
+        string email "Student Email"
         string request_type "Category of Registrar Service"
         int request_weight "Urgency Weight (1=Clearance, 9=Inquiry)"
         string grade_level "Academic Standing"
         int level_weight "Standing Weight (1=Graduating Senior, 9=Freshman)"
-        float arrival_timestamp "Epoch Unix Timestamp (seconds)"
-        float priority_score "Calculated Priority Score (Lower = Higher Priority)"
-        string status "Ticket Status ('WAITING', 'CALLED', 'SERVED')"
+        float arrival_timestamp "Epoch Unix Timestamp"
+        float priority_score "Calculated Priority Score"
+        string status "Status ('WAITING', 'CALLED', 'SERVED', 'SKIPPED', 'CANCELLED')"
+        float called_at "Timestamp when Ticket Called"
+        float served_at "Timestamp when Ticket Served"
+        string served_by FK "References USERS.email"
+        string remarks "Staff Remarks"
+        int feedback_rating "Student Rating (1 to 5 Stars)"
+        string feedback_comment "Student Rating Comments"
+        float feedback_submitted_at "Feedback Submission Timestamp"
     }
 ```
 
 #### Database DDL (`schema.sql`)
 ```sql
 -- MapuaQ: Mapúa University Registrar Priority Queue Schema
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id TEXT UNIQUE NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    role TEXT CHECK(role IN ('student', 'staff', 'admin')) NOT NULL DEFAULT 'student',
+    program_dept TEXT NULL,
+    avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
+    created_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NULL,
     student_id TEXT NOT NULL,
     full_name TEXT NOT NULL,
+    email TEXT NOT NULL,
     request_type TEXT NOT NULL,
     request_weight INTEGER NOT NULL,
     grade_level TEXT NOT NULL,
     level_weight INTEGER NOT NULL,
     arrival_timestamp REAL NOT NULL,
     priority_score REAL NOT NULL,
-    status TEXT DEFAULT 'WAITING'
+    status TEXT CHECK(status IN ('WAITING', 'CALLED', 'SERVED', 'SKIPPED', 'CANCELLED')) DEFAULT 'WAITING',
+    called_at REAL NULL,
+    served_at REAL NULL,
+    served_by TEXT NULL,
+    remarks TEXT NULL,
+    feedback_rating INTEGER NULL CHECK(feedback_rating BETWEEN 1 AND 5),
+    feedback_comment TEXT NULL,
+    feedback_submitted_at REAL NULL,
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    FOREIGN KEY (served_by) REFERENCES users (email)
 );
 ```
 
@@ -347,10 +430,11 @@ The MapuaQ development lifecycle strictly adheres to Dr. John De Guzman Tarampi'
                                          |
                                          v
 +-----------------------------------------------------------------------------------+
-| SPRINT 4 (Week 10 -> Due Final Defense): Analytics Engine, Verification & Defense |
+| SPRINT 4 (Week 10 -> Due Final Defense): Authentication, Analytics & Verification |
+| - Implemented institutional MyMail authentication, avatar uploads & user profiles. |
+| - Built live ticket tracking (/ticket/<id>), rating feedback & admin user module. |
 | - Created Matplotlib visual analytics engine (analytics.py & analytics.html).     |
-| - Embedded real-time PNG charts (/api/analytics/volume.png, distribution.png).    |
-| - Executed end-to-end regression testing, final report, and oral defense.         |
+| - Executed 12-test AAA suite, verified codebase, and compiled PROPOSAL.md.        |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -358,10 +442,10 @@ The MapuaQ development lifecycle strictly adheres to Dr. John De Guzman Tarampi'
 
 | Sprint / Week | Activities & Task Distribution | Deliverables & Artifacts |
 | :--- | :--- | :--- |
-| **Sprint 1**<br>*(Week 7 $\rightarrow$ Due W8)*<br>**Core Algorithm & POC** | - **Justin**: Architect object model & Strategy Pattern.<br>- **Hannah**: Write `heap_queue.py` Min-Heap operations & `__lt__` comparison.<br>- **Matt**: Write `schema.sql` supporting `REAL` Unix timestamps.<br>- **Wilhelm**: Setup GitHub Kanban board & write `test_heap.py`. | - Operational `heap_queue.py`.<br>- Verified `schema.sql` DDL.<br>- Initial `test_heap.py` suite.<br>- Active GitHub Kanban board. |
-| **Sprint 2**<br>*(Week 8 $\rightarrow$ Due W9)*<br>**Web Controller & UI** | - **Justin**: Build Flask web routes (`app.py`) for `/` and `/dashboard`.<br>- **Hannah**: Implement `/call-next` ticket dispatching logic.<br>- **Matt**: Create Bootstrap 5 templates (`checkin.html`, `dashboard.html`).<br>- **Wilhelm**: Conduct manual UI/UX testing & ticket status validation. | - Working web controller (`app.py`).<br>- Responsive HTML5 templates.<br>- Status transitions (`'WAITING'` $\rightarrow$ `'SERVED'`).<br>- Mid-project milestone review. |
-| **Sprint 3**<br>*(Week 9 $\rightarrow$ Due W10)*<br>**Dynamic Aging & Routing** | - **Justin**: Connect arrival timestamp persistence across web routes.<br>- **Hannah**: Build `refresh_scores()` $O(N)$ re-heapify pass.<br>- **Matt**: Update dashboard UI with wait time ($\Delta t$) counters.<br>- **Wilhelm**: Build `tests/test_app.py` AAA integration test suite. | - Dynamic aging engine.<br>- Automatic queue re-heapification.<br>- AAA route test suite (`test_app.py`).<br>- Starvation prevention validation. |
-| **Sprint 4**<br>*(Week 10 $\rightarrow$ Final)*<br>**Analytics & Oral Defense** | - **Justin**: Perform system code refactoring & final optimization.<br>- **Hannah**: Finalize mathematical formula documentation.<br>- **Matt**: Implement Matplotlib engine (`analytics.py` & `analytics.html`).<br>- **Wilhelm**: Compile final `PROPOSAL.md`, slides, & lead QA verification. | - Headless Matplotlib analytics.<br>- 100% passing test suite (8 tests).<br>- Submission-ready `PROPOSAL.md`.<br>- Project defense presentation. |
+| **Sprint 1**<br>*(Week 7 $\rightarrow$ Due W8)*<br>**Core Algorithm & POC** | - **Justin**: Architect object model & Strategy Pattern.<br>- **Justin**: Implement `heap_queue.py` Min-Heap operations & `__lt__` comparison.<br>- **Justin**: Design `schema.sql` supporting `REAL` Unix timestamps.<br>- **Justin**: Setup test harness & write initial `test_heap.py` suite. | - Operational `heap_queue.py`.<br>- Verified `schema.sql` DDL.<br>- Initial `test_heap.py` suite.<br>- Verified algorithmic POC. |
+| **Sprint 2**<br>*(Week 8 $\rightarrow$ Due W9)*<br>**Web Controller & UI** | - **Justin**: Build Flask web routes (`app.py`) for `/` and `/dashboard`.<br>- **Justin**: Implement `/call-next` ticket dispatching logic.<br>- **Justin**: Create Bootstrap 5 templates (`checkin.html`, `dashboard.html`).<br>- **Justin**: Conduct manual UI/UX testing & ticket status validation. | - Working web controller (`app.py`).<br>- Responsive HTML5 templates.<br>- Status transitions (`WAITING` $\rightarrow$ `SERVED`).<br>- Mid-project milestone review. |
+| **Sprint 3**<br>*(Week 9 $\rightarrow$ Due W10)*<br>**Dynamic Aging & Routing** | - **Justin**: Connect arrival timestamp persistence across web routes.<br>- **Justin**: Build `refresh_scores()` $O(N)$ re-heapify pass.<br>- **Justin**: Update dashboard UI with wait time ($\Delta t$) counters.<br>- **Justin**: Build `tests/test_app.py` AAA integration test suite. | - Dynamic aging engine.<br>- Automatic queue re-heapification.<br>- AAA route test suite (`test_app.py`).<br>- Starvation prevention validation. |
+| **Sprint 4**<br>*(Week 10 $\rightarrow$ Final)*<br>**Auth, Analytics & Defense** | - **Justin**: Build institutional auth (`@mymail.mapua.edu.ph`), RBAC & profiles.<br>- **Justin**: Build 15-service weighting matrix & tie-breaking logic.<br>- **Justin**: Implement avatar uploads, live ticket tracker, feedback & queue reset.<br>- **Justin**: Compile 13-test AAA suite, final `PROPOSAL.md`, slides & lead QA. | - Institutional auth & avatar uploads.<br>- Live ticket tracker & feedback system.<br>- Headless Matplotlib analytics.<br>- 100% passing test suite (13 tests).<br>- Final submission-ready `PROPOSAL.md`. |
 
 ---
 

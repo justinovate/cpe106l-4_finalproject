@@ -700,6 +700,24 @@ def admin_users():
     return render_template("admin_users.html", users=users_list, user=session.get("user"))
 
 
+@app.route("/admin/reset-queue", methods=["POST"])
+@admin_required
+def admin_reset_queue():
+    """Admin-only route to reset active queue tickets or purge ticket history."""
+    scope = request.form.get("scope", "waiting")
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    if scope == "waiting":
+        cursor.execute("DELETE FROM tickets WHERE status = 'WAITING' OR status = 'CALLED'")
+        flash("All active waiting and called queue tickets have been reset.", "warning")
+    else:
+        cursor.execute("DELETE FROM tickets")
+        flash("The entire queue database and servicing history have been purged.", "danger")
+    conn.commit()
+    conn.close()
+    return redirect(url_for("dashboard"))
+
+
 if __name__ == "__main__":
     init_db()
     app.run(debug=True)

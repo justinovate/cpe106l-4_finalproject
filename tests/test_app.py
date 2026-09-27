@@ -223,6 +223,30 @@ class TestMapuaQRoutes(unittest.TestCase):
         self.assertEqual(row[1], "John Smith")
         self.assertEqual(row[2], "staff")
 
+    def test_admin_reset_queue_route(self):
+        """Verifies admin POST /admin/reset-queue purges tickets from database."""
+        # Arrange: Login as admin and create a ticket
+        self._login_as_admin()
+        self.client.post("/checkin", data={
+            "student_id": "2024888888",
+            "full_name": "Test Reset Student",
+            "email": "reset@mymail.mapua.edu.ph",
+            "request_type": "General Inquiry",
+            "grade_level": "Freshman"
+        })
+
+        # Act
+        response = self.client.post("/admin/reset-queue", data={"scope": "all"}, follow_redirects=True)
+
+        # Assert
+        self.assertEqual(response.status_code, 200)
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tickets")
+        count = cursor.fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
