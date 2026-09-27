@@ -79,7 +79,8 @@ def allowed_file(filename: str) -> bool:
 def init_db():
     """Initializes separate staff_users and students tables, performs migrations, and seeds default Admin & Staff accounts."""
     conn = sqlite3.connect(DB)
-    with open("schema.sql", "r") as f:
+    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+    with open(schema_path, "r") as f:
         conn.executescript(f.read())
     conn.commit()
 
@@ -154,6 +155,12 @@ def init_db():
         conn.commit()
 
     conn.close()
+
+
+# Ensure database tables and seeded credentials exist upon module import
+with app.app_context():
+    init_db()
+
 
 
 def check_and_expire_skipped_tickets():
