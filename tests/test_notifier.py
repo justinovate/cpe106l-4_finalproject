@@ -67,6 +67,30 @@ class TestNotifierModule(unittest.TestCase):
         result = notifier.notify_ticket_created(ticket_data)
         self.assertFalse(result)
 
+    def test_send_password_reset_notice_dev_mode(self):
+        """Verifies send_password_reset_notice formats security email in Dev Mode."""
+        result = notifier.send_password_reset_notice(
+            to_email="studentreset@mymail.mapua.edu.ph",
+            full_name="Reset Student",
+            temp_password="TempPass123"
+        )
+        self.assertTrue(result)
+
+    def test_smtp_delivery_fallback_on_error(self):
+        """Verifies SMTP delivery failure logs error and falls back without crashing."""
+        Config.EMAIL_DEV_MODE = False
+        Config.SMTP_USERNAME = "invalid_user@mapua.edu.ph"
+        Config.SMTP_PASSWORD = "invalid_password"
+        Config.SMTP_SERVER = "invalid.smtp.server.local"
+
+        result = notifier.send_password_reset_notice(
+            to_email="fallback@mymail.mapua.edu.ph",
+            full_name="Fallback Student",
+            temp_password="TempPass456"
+        )
+        self.assertTrue(result)
+        Config.EMAIL_DEV_MODE = True
+
 
 if __name__ == "__main__":
     unittest.main()

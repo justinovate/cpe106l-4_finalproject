@@ -9,6 +9,8 @@ import re
 import time
 import datetime
 import uuid
+import secrets
+import string
 import sqlite3
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, Response, session, flash
@@ -28,6 +30,12 @@ app = Flask(__name__)
 app.secret_key = Config.SECRET_KEY
 DB = Config.DB_NAME
 strategy = StandardRegistrarStrategy()
+
+
+def generate_temp_password(length: int = 8) -> str:
+    """Generates a secure 8-character alphanumeric temporary password."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 # File Upload Configuration
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "avatars")
@@ -85,21 +93,25 @@ def init_db():
             SELECT COALESCE(student_id, 'EMP-' || id), email, password_hash, full_name, role, program_dept, avatar_url, created_at
             FROM users WHERE role IN ('staff', 'admin')
         """)
-    # Migration check: ensure avatar_position and phone_number exist in staff_users
+    # Migration check: ensure avatar_position, phone_number, and must_change_password exist in staff_users
     cursor.execute("PRAGMA table_info(staff_users)")
     su_cols = [row[1] for row in cursor.fetchall()]
     if "avatar_position" not in su_cols:
         cursor.execute("ALTER TABLE staff_users ADD COLUMN avatar_position TEXT DEFAULT 'center'")
     if "phone_number" not in su_cols:
         cursor.execute("ALTER TABLE staff_users ADD COLUMN phone_number TEXT NULL")
+    if "must_change_password" not in su_cols:
+        cursor.execute("ALTER TABLE staff_users ADD COLUMN must_change_password INTEGER DEFAULT 0")
 
-    # Migration check: ensure avatar_position and phone_number exist in students
+    # Migration check: ensure avatar_position, phone_number, and must_change_password exist in students
     cursor.execute("PRAGMA table_info(students)")
     st_cols = [row[1] for row in cursor.fetchall()]
     if "avatar_position" not in st_cols:
         cursor.execute("ALTER TABLE students ADD COLUMN avatar_position TEXT DEFAULT 'center'")
     if "phone_number" not in st_cols:
         cursor.execute("ALTER TABLE students ADD COLUMN phone_number TEXT NULL")
+    if "must_change_password" not in st_cols:
+        cursor.execute("ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0")
 
     # Migration check: ensure skipped_at, rejoin_used, and penalty_offset exist in tickets
     cursor.execute("PRAGMA table_info(tickets)")
@@ -370,13 +382,14 @@ def login():
 
         # Step 1: Check staff_users table for Staff / Admin accounts
         cursor.execute("""
-            SELECT id, employee_id, email, password_hash, full_name, role, program_dept, avatar_url
+            SELECT id, employee_id, email, password_hash, full_name, role, program_dept, avatar_url, COALESCE(must_change_password, 0)
             FROM staff_users
             WHERE lower(email) = lower(?) OR lower(employee_id) = lower(?)
         """, (identifier, identifier))
         s_row = cursor.fetchone()
 
         if s_row and check_password_hash(s_row[3], password):
+            must_change = bool(s_row[8])
             session["user"] = {
                 "id": s_row[0],
                 "student_id": s_row[1],
@@ -387,15 +400,21 @@ def login():
                 "program_dept": s_row[6],
                 "avatar_url": s_row[7] or "/static/uploads/avatars/default.png",
                 "username": s_row[1] or s_row[2],
-                "account_type": "staff_user"
+                "account_type": "staff_user",
+                "must_change_password": must_change
             }
             conn.close()
+
+            if must_change:
+                flash("You logged in using a temporary password. Please update your password to continue.", "warning")
+                return redirect(url_for("change_password"))
+
             flash(f"Welcome back, {s_row[4]}!", "success")
             return redirect(url_for("dashboard"))
 
         # Step 2: Check students table for Student accounts
         cursor.execute("""
-            SELECT id, student_id, email, password_hash, full_name, program_dept, avatar_url
+            SELECT id, student_id, email, password_hash, full_name, program_dept, avatar_url, COALESCE(must_change_password, 0)
             FROM students
             WHERE lower(email) = lower(?) OR lower(student_id) = lower(?)
         """, (identifier, identifier))
@@ -403,6 +422,7 @@ def login():
         conn.close()
 
         if std_row and check_password_hash(std_row[3], password):
+            must_change = bool(std_row[7])
             session["user"] = {
                 "id": std_row[0],
                 "student_id": std_row[1],
@@ -412,14 +432,110 @@ def login():
                 "program_dept": std_row[5],
                 "avatar_url": std_row[6] or "/static/uploads/avatars/default.png",
                 "username": std_row[1] or std_row[2],
-                "account_type": "student"
+                "account_type": "student",
+                "must_change_password": must_change
             }
+
+            if must_change:
+                flash("You logged in using a temporary password. Please update your password to continue.", "warning")
+                return redirect(url_for("change_password"))
+
             flash(f"Welcome back, {std_row[4]}!", "success")
             return redirect(url_for("student_dashboard"))
 
         flash("Invalid credentials. Please verify your Email / Account ID and password.", "danger")
 
     return render_template("login.html", user=session.get("user"))
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """Student & Staff self-service password reset request workflow."""
+    if request.method == "POST":
+        identifier = request.form.get("identifier", "").strip().lower()
+
+        # Always flash uniform anti-enumeration notice
+        flash("If the provided account exists, recovery instructions have been sent to your registered MyMail.", "info")
+
+        if identifier:
+            conn = sqlite3.connect(DB)
+            cursor = conn.cursor()
+
+            # Search student accounts first
+            cursor.execute("SELECT id, email, full_name FROM students WHERE lower(email) = ? OR lower(student_id) = ?", (identifier, identifier))
+            u_row = cursor.fetchone()
+            table_name = "students"
+
+            if not u_row:
+                # Search staff accounts
+                cursor.execute("SELECT id, email, full_name FROM staff_users WHERE lower(email) = ? OR lower(employee_id) = ?", (identifier, identifier))
+                u_row = cursor.fetchone()
+                table_name = "staff_users"
+
+            if u_row:
+                u_id, email, full_name = u_row
+                temp_pass = generate_temp_password(8)
+                pass_hash = generate_password_hash(temp_pass)
+
+                cursor.execute(f"UPDATE {table_name} SET password_hash = ?, must_change_password = 1 WHERE id = ?", (pass_hash, u_id))
+                conn.commit()
+
+                notifier.send_password_reset_notice(email, full_name, temp_pass)
+
+            conn.close()
+
+        return redirect(url_for("login"))
+
+    return render_template("forgot_password.html", user=session.get("user"))
+
+
+@app.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    """Enforces password update for temporary password logins and user self-service security updates."""
+    must_change = session.get("user", {}).get("must_change_password", False)
+    user_id = session["user"]["id"]
+    user_role = session["user"].get("role", "student")
+    target_table = "students" if user_role == "student" else "staff_users"
+
+    if request.method == "POST":
+        current_pass = request.form.get("current_password", "")
+        new_pass = request.form.get("new_password", "")
+        confirm_pass = request.form.get("confirm_password", "")
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT password_hash FROM {target_table} WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+
+        if not row or not check_password_hash(row[0], current_pass):
+            flash("Current password is incorrect.", "danger")
+            conn.close()
+            return render_template("change_password.html", must_change=must_change, user=session.get("user"))
+
+        if new_pass != confirm_pass:
+            flash("New passwords do not match. Please re-type your new password accurately.", "danger")
+            conn.close()
+            return render_template("change_password.html", must_change=must_change, user=session.get("user"))
+
+        if len(new_pass) < 6:
+            flash("New password must be at least 6 characters long.", "danger")
+            conn.close()
+            return render_template("change_password.html", must_change=must_change, user=session.get("user"))
+
+        new_pass_hash = generate_password_hash(new_pass)
+        cursor.execute(f"UPDATE {target_table} SET password_hash = ?, must_change_password = 0 WHERE id = ?", (new_pass_hash, user_id))
+        conn.commit()
+        conn.close()
+
+        session["user"]["must_change_password"] = False
+        flash("Your password has been successfully updated!", "success")
+
+        if user_role in ("staff", "admin"):
+            return redirect(url_for("dashboard"))
+        return redirect(url_for("student_dashboard"))
+
+    return render_template("change_password.html", must_change=must_change, user=session.get("user"))
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -1284,6 +1400,62 @@ def admin_delete_user():
         conn.close()
         flash("Invalid target account type.", "danger")
 
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@app.route("/admin/users/reset-password", methods=["POST"])
+@admin_required
+def admin_reset_password(user_id: int = None):
+    """Admin-only route to generate an 8-character temporary password and email reset notice."""
+    if not user_id:
+        user_id = request.form.get("user_id", type=int)
+    target_type = request.form.get("target_type", "").strip()
+
+    if not user_id:
+        flash("User ID is required.", "danger")
+        return redirect(url_for("admin_users"))
+
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+
+    user_row = None
+    table_name = None
+
+    if target_type == "staff_user":
+        cursor.execute("SELECT id, email, full_name FROM staff_users WHERE id = ?", (user_id,))
+        user_row = cursor.fetchone()
+        table_name = "staff_users"
+    elif target_type == "student":
+        cursor.execute("SELECT id, email, full_name FROM students WHERE id = ?", (user_id,))
+        user_row = cursor.fetchone()
+        table_name = "students"
+    else:
+        cursor.execute("SELECT id, email, full_name FROM staff_users WHERE id = ?", (user_id,))
+        user_row = cursor.fetchone()
+        if user_row:
+            table_name = "staff_users"
+        else:
+            cursor.execute("SELECT id, email, full_name FROM students WHERE id = ?", (user_id,))
+            user_row = cursor.fetchone()
+            if user_row:
+                table_name = "students"
+
+    if not user_row:
+        conn.close()
+        flash("Account not found.", "danger")
+        return redirect(url_for("admin_users"))
+
+    u_id, email, full_name = user_row
+    temp_pass = generate_temp_password(8)
+    pass_hash = generate_password_hash(temp_pass)
+
+    cursor.execute(f"UPDATE {table_name} SET password_hash = ?, must_change_password = 1 WHERE id = ?", (pass_hash, u_id))
+    conn.commit()
+    conn.close()
+
+    notifier.send_password_reset_notice(email, full_name, temp_pass)
+    flash(f"Temporary password generated and emailed to {email}.", "success")
     return redirect(url_for("admin_users"))
 
 

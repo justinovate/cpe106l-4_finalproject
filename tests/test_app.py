@@ -633,7 +633,122 @@ class TestMapuaQRoutes(unittest.TestCase):
         self.assertEqual(chart_res.mimetype, "image/png")
         self.assertGreater(len(chart_res.data), 100)
 
+    def test_admin_reset_password_route(self):
+        """Verifies admin POST /admin/users/<id>/reset-password generates temp password and sets must_change_password."""
+        self._login_as_admin()
+
+        # Create a student user
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO students (student_id, email, password_hash, full_name, created_at)
+            VALUES ('2024888001', 'resetadmin@mymail.mapua.edu.ph', 'OldHash', 'Reset Admin Student', ?)
+        """, (time.time(),))
+        st_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Admin resets student password
+        res = self.client.post(f"/admin/users/{st_id}/reset-password", data={"target_type": "student"}, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Temporary password generated and emailed to resetadmin@mymail.mapua.edu.ph.", res.data)
+
+        # Check DB state
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT password_hash, must_change_password FROM students WHERE id = ?", (st_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        self.assertNotEqual(row[0], "OldHash")
+        self.assertEqual(row[1], 1)
+
+    def test_forgot_password_self_service_route(self):
+        """Verifies /forgot-password generates temporary password and flashes anti-enumeration message."""
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO students (student_id, email, password_hash, full_name, created_at)
+            VALUES ('2024888002', 'forgotpass@mymail.mapua.edu.ph', 'OldHash', 'Forgot Student', ?)
+        """, (time.time(),))
+        st_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        res = self.client.post("/forgot-password", data={"identifier": "forgotpass@mymail.mapua.edu.ph"}, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"recovery instructions have been sent", res.data)
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT password_hash, must_change_password FROM students WHERE id = ?", (st_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        self.assertNotEqual(row[0], "OldHash")
+        self.assertEqual(row[1], 1)
+
+    def test_login_with_temporary_password_redirects_to_change_password(self):
+        """Verifies logging in with must_change_password=1 redirects to /change-password."""
+        from werkzeug.security import generate_password_hash
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        temp_hash = generate_password_hash("TempPass123")
+        cursor.execute("""
+            INSERT INTO students (student_id, email, password_hash, full_name, must_change_password, created_at)
+            VALUES ('2024888003', 'mustchange@mymail.mapua.edu.ph', ?, 'Must Change Student', 1, ?)
+        """, (temp_hash, time.time()))
+        st_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        res = self.client.post("/login", data={
+            "identifier": "2024888003",
+            "password": "TempPass123"
+        }, follow_redirects=True)
+
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"You logged in using a temporary password", res.data)
+        self.assertIn(b"Update Your Password", res.data)
+
+    def test_change_password_route_success(self):
+        """Verifies POST /change-password updates password and clears must_change_password flag."""
+        from werkzeug.security import generate_password_hash
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        temp_hash = generate_password_hash("TempPass123")
+        cursor.execute("""
+            INSERT INTO students (student_id, email, password_hash, full_name, must_change_password, created_at)
+            VALUES ('2024888004', 'changepass@mymail.mapua.edu.ph', ?, 'Change Pass Student', 1, ?)
+        """, (temp_hash, time.time()))
+        st_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Login to establish session
+        self.client.post("/login", data={"identifier": "2024888004", "password": "TempPass123"})
+
+        # Submit change password form
+        res = self.client.post("/change-password", data={
+            "current_password": "TempPass123",
+            "new_password": "NewSecurePass2026!",
+            "confirm_password": "NewSecurePass2026!"
+        }, follow_redirects=True)
+
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Your password has been successfully updated!", res.data)
+
+        # Verify DB state
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT must_change_password FROM students WHERE id = ?", (st_id,))
+        must_change = cursor.fetchone()[0]
+        conn.close()
+
+        self.assertEqual(must_change, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -1,7 +1,7 @@
 """
 MapuaQ Automated Email Notification Service
-Supports Dual-Mode Switch (Live SMTP vs. Development/Demo Mode)
-Dispatches asynchronous notifications for queue lifecycle events.
+Supports Dual-Mode Switch (Live SMTP vs. Development/Demo Mode) with Graceful Fallback.
+Dispatches asynchronous notifications for queue lifecycle events and security password resets.
 """
 
 import os
@@ -13,37 +13,45 @@ from flask import flash
 from config import Config
 
 
+def _log_mock_email(to_email: str, subject: str, body_text: str, header_label: str = "[MOCK EMAIL DISPATCH]"):
+    """Prints clean terminal log for offline demonstration or fallback mode."""
+    print("\n" + "=" * 50)
+    print(header_label)
+    print(f"TO: {to_email}")
+    print(f"SUBJECT: {subject}")
+    print("BODY:")
+    print(body_text)
+    print("-" * 50 + "\n")
+
+
 def _send_email_async(to_email: str, subject: str, body_text: str, body_html: str = None) -> bool:
     """
     Internal non-blocking email dispatch handler.
-    If EMAIL_DEV_MODE is True, logs formatted output to terminal.
-    If EMAIL_DEV_MODE is False, sends SMTP email via background thread with error handling.
+    If EMAIL_DEV_MODE is True or SMTP_USERNAME is empty, logs formatted mock email to terminal.
+    If EMAIL_DEV_MODE is False, sends real SMTP email via background thread with fallback on error.
     """
     if not to_email:
         return False
 
-    if Config.EMAIL_DEV_MODE:
-        # Development / Demo Mode Output
-        print("\n" + "=" * 50)
-        print("[MOCK EMAIL DISPATCH]")
-        print(f"TO: {to_email}")
-        print(f"SUBJECT: {subject}")
-        print("BODY:")
-        print(body_text)
-        print("-" * 50 + "\n")
+    dev_mode = Config.EMAIL_DEV_MODE
 
-        # Flash lightweight UI banner in active Flask session if inside request context
+    # Development / Demo Mode or Missing Credentials -> Mock Log
+    if dev_mode or not Config.SMTP_USERNAME:
+        if not dev_mode and not Config.SMTP_USERNAME:
+            print("[SMTP WARNING] SMTP_USERNAME is blank. Falling back to Dev/Demo Mode.")
+        _log_mock_email(to_email, subject, body_text, "[MOCK EMAIL DISPATCH]")
         try:
             flash(f"📧 [DEMO EMAIL SENT] Notification dispatched to {to_email}", "info")
         except RuntimeError:
-            pass  # Outside request context (e.g. background worker or test runner)
+            pass  # Outside active request context
         return True
 
     # Live SMTP Mode — Asynchronous Background Thread Execution
     def smtp_worker():
         try:
             msg = MIMEMultipart("alternative")
-            msg["From"] = Config.SMTP_FROM
+            sender_name = Config.SMTP_SENDER_NAME or "Mapúa Registrar (MapuaQ)"
+            msg["From"] = f"{sender_name} <{Config.SMTP_USERNAME}>"
             msg["To"] = to_email
             msg["Subject"] = subject
 
@@ -51,14 +59,17 @@ def _send_email_async(to_email: str, subject: str, body_text: str, body_html: st
             if body_html:
                 msg.attach(MIMEText(body_html, "html"))
 
-            with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT, timeout=10) as server:
-                server.starttls()
-                if Config.SMTP_USER and Config.SMTP_PASS:
-                    server.login(Config.SMTP_USER, Config.SMTP_PASS)
+            with smtplib.SMTP(Config.SMTP_SERVER, int(Config.SMTP_PORT), timeout=10) as server:
+                if Config.SMTP_USE_TLS:
+                    server.starttls()
+                if Config.SMTP_USERNAME and Config.SMTP_PASSWORD:
+                    server.login(Config.SMTP_USERNAME, Config.SMTP_PASSWORD)
                 server.send_message(msg)
-            print(f"[SMTP SUCCESS] Email sent to {to_email}")
+            print(f"[SMTP SUCCESS] Live email sent to {to_email}")
         except Exception as e:
-            print(f"[SMTP ERROR] Failed to send email to {to_email}: {e}")
+            print(f"[SMTP ERROR] Delivery failed: {e}")
+            # Fallback gracefully to terminal log so application never crashes
+            _log_mock_email(to_email, subject, body_text, "[SMTP ERROR FALLBACK DISPATCH]")
 
     threading.Thread(target=smtp_worker, daemon=True).start()
     try:
@@ -280,3 +291,59 @@ Mapúa University Registrar Office
     </div>
     """
     return _send_email_async(email, subject, body_text, body_html)
+
+
+def send_password_reset_notice(to_email: str, full_name: str, temp_password: str, base_url: str = None) -> bool:
+    """Dispatched when a temporary password is generated for account security recovery."""
+    base_url = base_url or Config.BASE_URL
+    login_link = f"{base_url}/login"
+
+    subject = "MapuaQ Security Notice: Your Temporary Password"
+    body_text = f"""Dear {full_name},
+
+MapuaQ Security Notice: A temporary password has been generated for your MapúaQ account.
+
+YOUR TEMPORARY PASSWORD:
+{temp_password}
+
+SECURITY INSTRUCTIONS:
+1. Log in to your MapúaQ account using your temporary password here:
+   {login_link}
+2. For account security, you will be prompted to change your password immediately upon logging in.
+
+If you did not request a password reset, please contact the Mapúa Registrar Office immediately.
+
+Best regards,
+Mapúa University Registrar Office
+"""
+    body_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="background-color: #800000; color: white; padding: 15px; border-radius: 6px 6px 0 0; text-align: center;">
+            <h2 style="margin: 0;">🔒 Security Notice: Temporary Password</h2>
+            <p style="margin: 5px 0 0 0; opacity: 0.9;">Mapúa Registrar Account Security</p>
+        </div>
+        <div style="padding: 20px; background-color: #ffffff;">
+            <p>Dear <strong>{full_name}</strong>,</p>
+            <p>A temporary password has been issued for your MapúaQ account.</p>
+            
+            <div style="background-color: #f8f9fa; border: 2px dashed #800000; padding: 15px; margin: 20px 0; text-align: center; border-radius: 6px;">
+                <small style="color: #666; font-weight: bold; text-transform: uppercase;">Temporary Password</small>
+                <div style="font-family: 'Courier New', monospace; font-size: 1.8rem; font-weight: bold; color: #800000; letter-spacing: 3px; margin-top: 5px;">
+                    {temp_password}
+                </div>
+            </div>
+
+            <p><strong>Required Action:</strong> Please log in using your temporary password and update your password immediately.</p>
+
+            <p style="text-align: center; margin-top: 25px;">
+                <a href="{login_link}" style="background-color: #800000; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                    🔑 Log In &amp; Change Password
+                </a>
+            </p>
+            <p style="font-size: 0.85rem; color: #777; margin-top: 20px; text-align: center;">
+                If you did not request a password reset, please notify Mapúa Registrar Administration immediately.
+            </p>
+        </div>
+    </div>
+    """
+    return _send_email_async(to_email, subject, body_text, body_html)

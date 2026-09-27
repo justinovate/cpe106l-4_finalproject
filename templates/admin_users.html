@@ -136,6 +136,12 @@
                                     </td>
                                     <td class="text-end">
                                         {% if u[0] != user.id %}
+                                            <form method="POST" action="/admin/users/{{ u[0] }}/reset-password" class="d-inline">
+                                                <input type="hidden" name="target_type" value="staff_user">
+                                                <button type="submit" class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" onclick="return confirm('Reset password for {{ u[3] }} ({{ u[2] }})? A temporary password will be emailed.')">
+                                                    🔑 Reset
+                                                </button>
+                                            </form>
                                             <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStaffModal{{ u[0] }}">
                                                 Delete
                                             </button>
@@ -221,6 +227,12 @@
                                     <td class="fw-bold">{{ s[3] }}</td>
                                     <td><span class="badge bg-light text-dark border">{{ s[4] or 'Student' }}</span></td>
                                     <td class="text-end">
+                                        <form method="POST" action="/admin/users/{{ s[0] }}/reset-password" class="d-inline">
+                                            <input type="hidden" name="target_type" value="student">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" onclick="return confirm('Reset password for {{ s[3] }} ({{ s[2] }})? A temporary password will be emailed.')">
+                                                🔑 Reset
+                                            </button>
+                                        </form>
                                         <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStudentModal{{ s[0] }}">
                                             Delete
                                         </button>
