@@ -532,22 +532,47 @@ def ticket_feedback(ticket_id: int):
 @app.route("/dashboard")
 @staff_required
 def dashboard():
-    """Registrar Staff Monitor Dashboard with filter tabs and servicing history."""
+    """Registrar Staff Monitor Dashboard with active called ticket, queue monitor, and servicing history."""
     filter_type = request.args.get("filter", "waiting")
+    
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+
+    # Fetch currently active CALLED ticket for counter
+    cursor.execute("""
+        SELECT id, student_id, full_name, email, request_type, grade_level, arrival_timestamp, called_at, served_by
+        FROM tickets WHERE status = 'CALLED' ORDER BY called_at DESC LIMIT 1
+    """)
+    c_row = cursor.fetchone()
+
+    called_ticket = None
+    if c_row:
+        called_mins = round((time.time() - c_row[7]) / 60.0, 1) if c_row[7] else 0.0
+        called_ticket = {
+            "id": c_row[0],
+            "student_id": c_row[1],
+            "full_name": c_row[2],
+            "email": c_row[3],
+            "request_type": c_row[4],
+            "grade_level": c_row[5],
+            "arrival_timestamp": c_row[6],
+            "called_at": c_row[7],
+            "served_by": c_row[8],
+            "elapsed_called_mins": called_mins
+        }
+
+    # Load WAITING tickets into Min-Heap
     queue = load_queue_from_db()
     sorted_waiting = queue.get_sorted_list()
-    top_ticket = queue.peek()
+    top_waiting = queue.peek()
 
     served_tickets = []
     all_tickets = []
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-
     if filter_type == "served":
         cursor.execute("""
-            SELECT id, student_id, full_name, request_type, arrival_timestamp, served_at, served_by, feedback_rating, feedback_comment
-            FROM tickets WHERE status = 'SERVED' ORDER BY served_at DESC
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, served_at, served_by, remarks, feedback_rating, feedback_comment, status
+            FROM tickets WHERE status IN ('SERVED', 'SKIPPED') ORDER BY served_at DESC
         """)
         rows = cursor.fetchall()
         for r in rows:
@@ -559,14 +584,16 @@ def dashboard():
                 "request_type": r[3],
                 "arrival_timestamp": r[4],
                 "served_at": r[5],
-                "served_by": r[6],
-                "wait_duration": wait_dur,
-                "feedback_rating": r[7],
-                "feedback_comment": r[8]
+                "served_by": r[6] or "—",
+                "remarks": r[7] or "—",
+                "feedback_rating": r[8],
+                "feedback_comment": r[9],
+                "status": r[10],
+                "wait_duration": wait_dur
             })
     elif filter_type == "all":
         cursor.execute("""
-            SELECT id, student_id, full_name, request_type, arrival_timestamp, priority_score, status, served_at, served_by
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, priority_score, status, served_at, served_by, remarks
             FROM tickets ORDER BY arrival_timestamp DESC
         """)
         rows = cursor.fetchall()
@@ -580,7 +607,8 @@ def dashboard():
                 "priority_score": r[5],
                 "status": r[6],
                 "served_at": r[7],
-                "served_by": r[8]
+                "served_by": r[8] or "—",
+                "remarks": r[9] or "—"
             })
 
     conn.close()
@@ -589,17 +617,60 @@ def dashboard():
         "dashboard.html",
         user=session.get("user"),
         filter_type=filter_type,
-        top=top_ticket,
+        called_ticket=called_ticket,
+        top=top_waiting,
+        top_waiting=top_waiting,
         waiting_tickets=sorted_waiting,
         served_tickets=served_tickets,
         all_tickets=all_tickets
     )
 
 
+@app.route("/tickets/<int:ticket_id>/call", methods=["POST"])
+@app.route("/ticket/<int:ticket_id>/call", methods=["POST"])
+@staff_required
+def call_ticket(ticket_id: int):
+    """Calls a specific waiting ticket to the active counter window."""
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+
+    # Concurrency check: prevent duplicate active calls
+    cursor.execute("SELECT id, full_name FROM tickets WHERE status = 'CALLED'")
+    active_called = cursor.fetchone()
+    if active_called:
+        flash(f"Counter currently has an active called ticket (#{active_called[0]} - {active_called[1]}). Please complete service or mark as skipped before calling a new student.", "warning")
+        conn.close()
+        return redirect(url_for("dashboard"))
+
+    current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
+    cursor.execute("""
+        UPDATE tickets
+        SET status = 'CALLED', called_at = ?, served_by = ?
+        WHERE id = ? AND status = 'WAITING'
+    """, (time.time(), current_user, ticket_id))
+    conn.commit()
+    conn.close()
+
+    flash(f"Ticket #{ticket_id} has been CALLED to the service counter.", "info")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/call-next", methods=["POST"])
 @staff_required
 def call_next():
-    """Calls the root ticket in Min-Heap, updates status to CALLED with called_at timestamp."""
+    """Calls the root priority ticket in Min-Heap, updating status to CALLED with called_at timestamp."""
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+
+    # Concurrency check: prevent duplicate active calls
+    cursor.execute("SELECT id, full_name FROM tickets WHERE status = 'CALLED'")
+    active_called = cursor.fetchone()
+    if active_called:
+        flash(f"Counter currently has an active called ticket (#{active_called[0]} - {active_called[1]}). Please complete service or mark as skipped before calling a new student.", "warning")
+        conn.close()
+        return redirect(url_for("dashboard"))
+    conn.close()
+
     queue = load_queue_from_db()
     top_ticket = queue.peek()
 
@@ -613,25 +684,51 @@ def call_next():
         """, (time.time(), current_user, top_ticket.ticket_id))
         conn.commit()
         conn.close()
-        flash(f"Ticket #{top_ticket.ticket_id} ({top_ticket.name}) is now CALLED.", "info")
+        flash(f"Ticket #{top_ticket.ticket_id} ({top_ticket.name}) is now CALLED to the counter.", "info")
+    else:
+        flash("No students currently waiting in queue.", "warning")
 
     return redirect(url_for("dashboard"))
 
 
+@app.route("/tickets/<int:ticket_id>/serve", methods=["POST"])
 @app.route("/ticket/<int:ticket_id>/serve", methods=["POST"])
 @staff_required
 def mark_serve(ticket_id: int):
-    """Marks ticket as SERVED with completion timestamp and staff email/username."""
+    """Marks ticket as SERVED with completion timestamp, staff ID, and optional transaction remarks."""
+    remarks = request.form.get("remarks", "").strip()
     current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
     conn = sqlite3.connect(DB)
     conn.execute("""
         UPDATE tickets
-        SET status = 'SERVED', served_at = ?, served_by = ?
+        SET status = 'SERVED', served_at = ?, served_by = ?, remarks = ?
         WHERE id = ?
-    """, (time.time(), current_user, ticket_id))
+    """, (time.time(), current_user, remarks if remarks else None, ticket_id))
     conn.commit()
     conn.close()
-    flash(f"Ticket #{ticket_id} marked as SERVED by {current_user}.", "success")
+    flash(f"Ticket #{ticket_id} successfully marked as SERVED.", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/tickets/<int:ticket_id>/skip", methods=["POST"])
+@app.route("/ticket/<int:ticket_id>/skip", methods=["POST"])
+@staff_required
+def mark_skip(ticket_id: int):
+    """Marks ticket as SKIPPED (No-Show) with reason and frees counter."""
+    skip_reason = request.form.get("skip_reason", "").strip() or request.form.get("remarks", "").strip()
+    if not skip_reason:
+        skip_reason = "No-show during 5-minute call window"
+
+    current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
+    conn = sqlite3.connect(DB)
+    conn.execute("""
+        UPDATE tickets
+        SET status = 'SKIPPED', served_at = ?, served_by = ?, remarks = ?
+        WHERE id = ?
+    """, (time.time(), current_user, skip_reason, ticket_id))
+    conn.commit()
+    conn.close()
+    flash(f"Ticket #{ticket_id} marked as SKIPPED (No-Show).", "warning")
     return redirect(url_for("dashboard"))
 
 

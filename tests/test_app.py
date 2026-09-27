@@ -181,6 +181,58 @@ class TestMapuaQRoutes(unittest.TestCase):
         self.assertEqual(row2[1], "admin@mapua.edu.ph")
         self.assertIsNotNone(row2[2])
 
+    def test_skip_ticket_route(self):
+        """Verifies POST /tickets/<id>/skip transitions ticket to SKIPPED with reason remarks."""
+        # Arrange
+        self._login_as_admin()
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2021002', 'Bob Junior', 'bob@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Junior', 5, ?, 5.0, 'CALLED')
+        """, (time.time(),))
+        ticket_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Act
+        res = self.client.post(f"/tickets/{ticket_id}/skip", data={"skip_reason": "No-show after 3 calls"}, follow_redirects=True)
+
+        # Assert
+        self.assertEqual(res.status_code, 200)
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, remarks FROM tickets WHERE id = ?", (ticket_id,))
+        row = cursor.fetchone()
+        conn.close()
+        self.assertEqual(row[0], "SKIPPED")
+        self.assertEqual(row[1], "No-show after 3 calls")
+
+    def test_call_ticket_concurrency_prevention(self):
+        """Verifies system prevents calling a second ticket when a ticket is already CALLED."""
+        # Arrange: create one CALLED ticket and one WAITING ticket
+        self._login_as_admin()
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2021003', 'Active Student', 'active@mymail.mapua.edu.ph', 'TOR', 4, 'Senior', 3, ?, 3.0, 'CALLED')
+        """, (time.time(),))
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2021004', 'Waiting Student', 'waiting@mymail.mapua.edu.ph', 'Overload', 2, 'Senior', 3, ?, 2.0, 'WAITING')
+        """, (time.time(),))
+        waiting_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Act: try calling second ticket
+        res = self.client.post(f"/tickets/{waiting_id}/call", follow_redirects=True)
+
+        # Assert: warning flash message prevents duplicate call
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Counter currently has an active called ticket", res.data)
+
     def test_analytics_dashboard_route_authenticated_get(self):
         """Verifies GET /analytics renders metrics cards for authenticated staff."""
         # Arrange

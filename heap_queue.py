@@ -33,7 +33,10 @@ class StudentTicket:
     def __init__(self, ticket_id: int, student_id: str, name: str,
                  request_name: str, request_weight: int,
                  standing_name: str, standing_weight: int,
-                 arrival_timestamp: float = None):
+                 arrival_timestamp: float = None,
+                 status: str = "WAITING",
+                 called_at: float = None,
+                 remarks: str = None):
         self.ticket_id = ticket_id
         self.student_id = student_id
         self.name = name
@@ -42,6 +45,9 @@ class StudentTicket:
         self.standing_name = standing_name
         self.standing_weight = standing_weight
         self.arrival_timestamp = arrival_timestamp if arrival_timestamp is not None else time.time()
+        self.status = status
+        self.called_at = called_at
+        self.remarks = remarks
         self.priority_score = 0.0
 
     @property

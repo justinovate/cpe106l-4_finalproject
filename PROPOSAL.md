@@ -45,7 +45,7 @@ To design, implement, and validate **MapuaQ**, a 3-tier web-based student priori
 3. **Institutional Authentication & User Profiles**: Implement secure authentication (`werkzeug.security` password hashing) accepting Mapúa MyMail (`@mymail.mapua.edu.ph`) or Student ID, with filesystem avatar uploads (`static/uploads/avatars/`) and user profile management (`/profile`).
 4. **Student Live Ticket Status & Feedback Tracking**: Create a dedicated student tracking page (`/ticket/<id>`) featuring 10-second auto-refresh, position ahead counters, estimated wait times, and post-service 1–5 star rating submission.
 5. **Relational Data Persistence & Audit Trail**: Design an SQLite schema (`students_queue.db`) storing Unix epoch timestamps (`REAL NOT NULL`) to ensure exact arrival time persistence, continuous dynamic aging, and complete servicing audit logging (`called_at`, `served_at`, `served_by`).
-6. **Automated Testing & Verification**: Construct a comprehensive 12-test suite in `unittest` (`test_heap.py`, `test_app.py`) using the Arrange-Act-Assert (AAA) pattern to verify heap root invariants, exact score calculations, starvation prevention, session authentication, avatar uploads, and servicing audit trails.
+6. **Automated Testing & Verification**: Construct a comprehensive 15-test suite in `unittest` (`test_heap.py`, `test_app.py`) using the Arrange-Act-Assert (AAA) pattern to verify heap root invariants, exact score calculations, starvation prevention, session authentication, avatar uploads, independent call/serve/skip route actions, duplicate call concurrency prevention, and servicing audit trails.
 7. **Visual Queue Analytics**: Develop a Matplotlib analytics module (`analytics.py`) utilizing the non-interactive `Agg` backend to render real-time queue volume breakdowns and priority score distribution charts.
 
 ---
@@ -55,7 +55,7 @@ To design, implement, and validate **MapuaQ**, a 3-tier web-based student priori
 | User Role | Interface / View | Key Responsibilities & Capabilities |
 | :--- | :--- | :--- |
 | **Student** | Kiosk Check-In (`/checkin`), Ticket Tracker (`/ticket/<id>`), Profile (`/profile`) | Registers with Mapúa MyMail; uploads profile avatar; submits priority tickets for 15 registrar services; tracks live status with position ahead counters; submits 1–5 star service ratings. |
-| **Registrar Staff** | Staff Dashboard (`/dashboard`) | Authenticates via employee credentials; monitors live queue ordered by Min-Heap priority; calls tickets (`status='CALLED'`); marks tickets served (`status='SERVED'`); inspects servicing audit trails and student rating feedback. |
+| **Registrar Staff** | Staff Dashboard (`/dashboard`) | Authenticates via employee credentials; monitors live queue ordered by Min-Heap priority; executes decoupled ticket controls (`/tickets/<id>/call`, `/tickets/<id>/serve` with transaction notes, `/tickets/<id>/skip` for no-shows); inspects servicing audit trails with staff remarks. |
 | **Administrator** | User Management (`/admin/users`), Analytics (`/analytics`) | Provisions staff and administrator user accounts; inspects real-time queue volume metrics and priority distribution histograms. |
 
 ---
