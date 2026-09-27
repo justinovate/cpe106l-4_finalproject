@@ -82,8 +82,23 @@ def init_db():
             SELECT COALESCE(student_id, 'EMP-' || id), email, password_hash, full_name, role, program_dept, avatar_url, created_at
             FROM users WHERE role IN ('staff', 'admin')
         """)
-        cursor.execute("DROP TABLE users")
-        conn.commit()
+    # Migration check: ensure avatar_position and phone_number exist in staff_users
+    cursor.execute("PRAGMA table_info(staff_users)")
+    su_cols = [row[1] for row in cursor.fetchall()]
+    if "avatar_position" not in su_cols:
+        cursor.execute("ALTER TABLE staff_users ADD COLUMN avatar_position TEXT DEFAULT 'center'")
+    if "phone_number" not in su_cols:
+        cursor.execute("ALTER TABLE staff_users ADD COLUMN phone_number TEXT NULL")
+
+    # Migration check: ensure avatar_position and phone_number exist in students
+    cursor.execute("PRAGMA table_info(students)")
+    st_cols = [row[1] for row in cursor.fetchall()]
+    if "avatar_position" not in st_cols:
+        cursor.execute("ALTER TABLE students ADD COLUMN avatar_position TEXT DEFAULT 'center'")
+    if "phone_number" not in st_cols:
+        cursor.execute("ALTER TABLE students ADD COLUMN phone_number TEXT NULL")
+
+    conn.commit()
 
     # Seed default Admin account into staff_users if missing
     cursor.execute("SELECT id FROM staff_users WHERE email = 'admin@mapua.edu.ph' OR employee_id = 'admin'")
@@ -267,7 +282,7 @@ def logout():
 @app.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
-    """User profile view, avatar update, password change, and personal ticket history."""
+    """User profile view, avatar update, reposition, remove, password change, and personal ticket history."""
     user_id = session["user"]["id"]
     user_role = session["user"].get("role", "student")
     target_table = "students" if user_role == "student" else "staff_users"
@@ -278,7 +293,22 @@ def profile():
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
 
-        if action == "update_avatar":
+        if action == "update_info":
+            full_name = request.form.get("full_name", "").strip()
+            program_dept = request.form.get("program_dept", "").strip()
+            phone_number = request.form.get("phone_number", "").strip()
+
+            if full_name:
+                cursor.execute(f"UPDATE {target_table} SET full_name = ?, program_dept = ?, phone_number = ? WHERE id = ?", (full_name, program_dept, phone_number, user_id))
+                conn.commit()
+                session["user"]["full_name"] = full_name
+                session["user"]["program_dept"] = program_dept
+                flash("Basic profile details updated successfully!", "success")
+            else:
+                flash("Full name cannot be blank.", "danger")
+
+        elif action == "update_avatar":
+            position = request.form.get("avatar_position", "center")
             if "avatar" in request.files:
                 file = request.files["avatar"]
                 if file and file.filename != "" and allowed_file(file.filename):
@@ -288,12 +318,28 @@ def profile():
                     file.save(os.path.join(UPLOAD_FOLDER, unique_filename))
                     new_avatar_url = f"/static/uploads/avatars/{unique_filename}"
 
-                    cursor.execute(f"UPDATE {target_table} SET avatar_url = ? WHERE id = ?", (new_avatar_url, user_id))
+                    cursor.execute(f"UPDATE {target_table} SET avatar_url = ?, avatar_position = ? WHERE id = ?", (new_avatar_url, position, user_id))
                     conn.commit()
                     session["user"]["avatar_url"] = new_avatar_url
+                    session["user"]["avatar_position"] = position
                     flash("Profile picture updated successfully!", "success")
                 else:
                     flash("Invalid file format. Allowed: PNG, JPG, JPEG, WEBP.", "danger")
+
+        elif action == "reposition_avatar":
+            position = request.form.get("avatar_position", "center")
+            cursor.execute(f"UPDATE {target_table} SET avatar_position = ? WHERE id = ?", (position, user_id))
+            conn.commit()
+            session["user"]["avatar_position"] = position
+            flash("Profile picture alignment updated!", "success")
+
+        elif action == "remove_avatar":
+            default_url = "/static/uploads/avatars/default.png"
+            cursor.execute(f"UPDATE {target_table} SET avatar_url = ?, avatar_position = 'center' WHERE id = ?", (default_url, user_id))
+            conn.commit()
+            session["user"]["avatar_url"] = default_url
+            session["user"]["avatar_position"] = "center"
+            flash("Profile picture removed successfully.", "info")
 
         elif action == "update_password":
             current_pass = request.form.get("current_password", "")
@@ -306,7 +352,7 @@ def profile():
             if not row or not check_password_hash(row[0], current_pass):
                 flash("Current password is incorrect.", "danger")
             elif new_pass != confirm_pass:
-                flash("New passwords do not match.", "danger")
+                flash("New passwords do not match. Please re-type your new password accurately.", "danger")
             elif len(new_pass) < 6:
                 flash("New password must be at least 6 characters long.", "danger")
             else:
@@ -327,7 +373,7 @@ def profile():
 
     if user_role == "student":
         cursor.execute("""
-            SELECT id, student_id, email, full_name, program_dept, avatar_url, created_at
+            SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at
             FROM students WHERE id = ?
         """, (user_id,))
         u_row = cursor.fetchone()
@@ -346,7 +392,9 @@ def profile():
             "role": "student",
             "program_dept": u_row[4],
             "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
-            "created_at": u_row[6]
+            "avatar_position": u_row[6] or "center",
+            "phone_number": u_row[7] or "",
+            "created_at": u_row[8]
         }
 
         cursor.execute("""
@@ -372,7 +420,7 @@ def profile():
             })
     else:
         cursor.execute("""
-            SELECT id, employee_id, email, full_name, role, program_dept, avatar_url, created_at
+            SELECT id, employee_id, email, full_name, role, program_dept, avatar_url, avatar_position, phone_number, created_at
             FROM staff_users WHERE id = ?
         """, (user_id,))
         u_row = cursor.fetchone()
@@ -392,7 +440,9 @@ def profile():
             "role": u_row[4],
             "program_dept": u_row[5],
             "avatar_url": u_row[6] or "/static/uploads/avatars/default.png",
-            "created_at": u_row[7]
+            "avatar_position": u_row[7] or "center",
+            "phone_number": u_row[8] or "",
+            "created_at": u_row[9]
         }
 
         staff_identifier = user_info["email"]

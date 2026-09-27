@@ -8,8 +8,17 @@
     <style>
         .bg-mapua-cardinal { background-color: #800000; }
         .text-mapua-cardinal { color: #800000; }
-        .avatar-lg { width: 110px; height: 110px; object-fit: cover; border: 3px solid #800000; }
+        .border-mapua-cardinal { border-color: #800000 !important; }
+        .avatar-lg {
+            width: 130px;
+            height: 130px;
+            object-fit: cover;
+            border: 4px solid #800000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
         .avatar-sm { width: 36px; height: 36px; object-fit: cover; }
+        .profile-table th { background-color: #f8f9fa; width: 35%; font-weight: 600; color: #495057; }
+        .profile-table td { background-color: #ffffff; }
     </style>
 </head>
 <body class="bg-light">
@@ -23,14 +32,17 @@
             {% if user.role in ('staff', 'admin') %}
                 <a class="nav-link fw-bold" href="/dashboard">Queue Monitor</a>
                 <a class="nav-link fw-bold" href="/analytics">Analytics</a>
+                {% if user.role == 'admin' %}
+                    <a class="nav-link fw-bold" href="/admin/users">Manage Accounts</a>
+                {% endif %}
             {% else %}
                 <a class="nav-link fw-bold" href="/checkin">Issue New Ticket</a>
             {% endif %}
-            <a class="nav-link active fw-bold" href="/profile">My Profile</a>
+            <a class="nav-link active fw-bold text-warning" href="/profile">My Profile</a>
         </div>
         <div class="navbar-nav align-items-center">
             <span class="navbar-text text-light me-3 d-flex align-items-center">
-                <img src="{{ user.avatar_url }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white">
+                <img src="{{ user.avatar_url }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white" style="object-fit: cover; object-position: {{ user.avatar_position or 'center' }};">
                 <strong>{{ user.full_name }}</strong>
                 <span class="badge bg-light text-dark text-capitalize ms-2">{{ user.role }}</span>
             </span>
@@ -40,10 +52,11 @@
 </nav>
 
 <div class="container pb-5">
+
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+          <div class="alert alert-{{ category }} alert-dismissible fade show mb-4 shadow-sm" role="alert">
             {{ message }}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
           </div>
@@ -51,65 +64,143 @@
       {% endif %}
     {% endwith %}
 
-    <div class="row g-4">
-        <!-- User Info & Avatar Card -->
-        <div class="col-lg-4">
-            <div class="card shadow-sm border-0 rounded-3 text-center p-4">
-                <div class="position-relative mx-auto mb-3">
-                    <img src="{{ user_info.avatar_url }}" alt="Profile Avatar" class="rounded-circle avatar-lg shadow-sm">
-                </div>
-                <h4 class="fw-bold text-mapua-cardinal mb-1">{{ user_info.full_name }}</h4>
-                <p class="text-muted mb-2"><span class="badge bg-danger text-capitalize px-3 py-1">{{ user_info.role }}</span></p>
-                <p class="text-secondary small mb-3">{{ user_info.program_dept or 'Mapúa University' }}</p>
+    <!-- Top Profile Header (Centered Avatar & Name) -->
+    <div class="card shadow-sm border-0 rounded-3 text-center p-4 mb-4">
+        <div class="position-relative mx-auto mb-3">
+            <img src="{{ user_info.avatar_url }}" alt="Profile Avatar" class="rounded-circle avatar-lg" style="object-position: {{ user_info.avatar_position or 'center' }};">
+        </div>
+        <h3 class="fw-bold text-dark text-uppercase tracking-wide mb-1" style="letter-spacing: 1px;">
+            {{ user_info.full_name }}
+        </h3>
+        <p class="text-secondary small fw-bold mb-2">{{ user_info.email }}</p>
+        <div>
+            <span class="badge bg-danger text-capitalize px-3 py-1.5 fs-6">{{ user_info.role }}</span>
+            <span class="badge bg-secondary text-capitalize px-3 py-1.5 fs-6 ms-1">{{ user_info.program_dept or 'Mapúa University' }}</span>
+        </div>
 
-                <ul class="list-group list-group-flush text-start small mb-3">
-                    <li class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted fw-bold">Student / Staff ID:</span>
-                        <span class="fw-bold">{{ user_info.student_id or 'N/A' }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted fw-bold">Email Address:</span>
-                        <span class="fw-bold text-break">{{ user_info.email }}</span>
-                    </li>
-                </ul>
-
-                <!-- Change Avatar Form -->
-                <form method="POST" action="/profile" enctype="multipart/form-data" class="mt-2">
-                    <input type="hidden" name="action" value="update_avatar">
-                    <label class="form-label small fw-bold text-muted d-block">Update Profile Picture</label>
-                    <div class="input-group input-group-sm mb-2">
-                        <input type="file" name="avatar" class="form-control" accept="image/png, image/jpeg, image/jpg, image/webp" required>
-                        <button type="submit" class="btn btn-outline-danger">Upload</button>
-                    </div>
+        <!-- Avatar Controls (Upload, Reposition, Remove) -->
+        <div class="d-flex justify-content-center gap-2 mt-3 pt-2 border-top border-light">
+            <button type="button" class="btn btn-sm btn-outline-danger fw-bold" data-bs-toggle="modal" data-bs-target="#uploadAvatarModal">
+                📷 Change Photo
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" data-bs-toggle="modal" data-bs-target="#repositionAvatarModal">
+                ⚙️ Reposition Image
+            </button>
+            {% if user_info.avatar_url != '/static/uploads/avatars/default.png' %}
+                <form method="POST" action="/profile" class="d-inline">
+                    <input type="hidden" name="action" value="remove_avatar">
+                    <button type="submit" class="btn btn-sm btn-outline-dark fw-bold">
+                        🗑️ Remove Photo
+                    </button>
                 </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Left Column: Basic Information & Profile Editing -->
+        <div class="col-lg-6">
+            <!-- Basic Information Card -->
+            <div class="card shadow-sm border-0 rounded-3 mb-4">
+                <div class="card-header bg-dark text-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span>Basic Information</span>
+                    <button type="button" class="btn btn-sm btn-warning text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#editInfoModal">
+                        Edit Details
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-bordered profile-table mb-0">
+                        <tbody>
+                            <tr>
+                                <th>Full Name</th>
+                                <td class="fw-bold text-dark">{{ user_info.full_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Email Address</th>
+                                <td>
+                                    <span class="text-primary fw-bold">{{ user_info.email }}</span>
+                                    <span class="badge bg-light text-muted border ms-2">Verified</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Account / ID Number</th>
+                                <td class="fw-bold text-dark">{{ user_info.student_id or user_info.employee_id or 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Program / Office Dept</th>
+                                <td>{{ user_info.program_dept or 'Not Specified' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Contact Phone</th>
+                                <td>{{ user_info.phone_number or 'Not Specified (Click Edit Details)' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Password</th>
+                                <td class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">••••••••••••</span>
+                                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 fw-bold" data-bs-toggle="collapse" data-bs-target="#passwordCollapse">
+                                        Change Password
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            <!-- Change Password Card -->
-            <div class="card shadow-sm border-0 rounded-3 mt-4 p-4">
-                <h5 class="fw-bold text-mapua-cardinal mb-3">Security &amp; Password</h5>
-                <form method="POST" action="/profile">
-                    <input type="hidden" name="action" value="update_password">
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold">Current Password</label>
-                        <input type="password" name="current_password" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold">New Password</label>
-                        <input type="password" name="new_password" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Confirm New Password</label>
-                        <input type="password" name="confirm_password" class="form-control form-control-sm" required>
-                    </div>
-                    <button type="submit" class="btn btn-dark btn-sm w-100 fw-bold">Update Password</button>
-                </form>
+            <!-- Password Change Section (Collapsible & In-line) -->
+            <div class="collapse mb-4" id="passwordCollapse">
+                <div class="card shadow-sm border-0 rounded-3 p-4 border-start border-4 border-danger">
+                    <h5 class="fw-bold text-mapua-cardinal mb-3">Security — Change Account Password</h5>
+                    <form method="POST" action="/profile">
+                        <input type="hidden" name="action" value="update_password">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Current Password</label>
+                            <input type="password" name="current_password" class="form-control" placeholder="Enter current password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">New Password</label>
+                            <input type="password" name="new_password" class="form-control" placeholder="Minimum 6 characters" minlength="6" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold text-danger">Re-type New Password (For Assurance)</label>
+                            <input type="password" name="confirm_password" class="form-control" placeholder="Re-type new password to confirm" minlength="6" required>
+                            <div class="form-text small text-muted">Re-type your password for assurance to prevent typing mistakes.</div>
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100 py-2 fw-bold bg-mapua-cardinal">
+                            Confirm Password Update
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
 
-        <!-- Right Column: Student Ticket History OR Staff Servicing Overview -->
-        <div class="col-lg-8">
+        <!-- Right Column: Security Card & Servicing History -->
+        <div class="col-lg-6">
+            <!-- Account Security Card -->
+            <div class="card shadow-sm border-0 rounded-3 mb-4 p-4">
+                <h5 class="fw-bold text-mapua-cardinal mb-3">Account Security &amp; Credentials</h5>
+                <form method="POST" action="/profile">
+                    <input type="hidden" name="action" value="update_password">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Current Password</label>
+                        <input type="password" name="current_password" class="form-control form-control-sm" placeholder="Current password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">New Password</label>
+                        <input type="password" name="new_password" class="form-control form-control-sm" placeholder="New password" minlength="6" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-danger">Re-type New Password</label>
+                        <input type="password" name="confirm_password" class="form-control form-control-sm" placeholder="Re-type new password for assurance" minlength="6" required>
+                        <small class="text-muted d-block mt-1">Re-typing password ensures accuracy before saving.</small>
+                    </div>
+                    <button type="submit" class="btn btn-dark btn-sm w-100 py-2 fw-bold">Update Password</button>
+                </form>
+            </div>
+
             {% if user_info.role == 'student' %}
-            <!-- STUDENT PROFILE VIEW: Personal Queue Tickets & Ratings -->
+            <!-- STUDENT QUEUE HISTORY -->
             <div class="card shadow-sm border-0 rounded-3">
                 <div class="card-header bg-mapua-cardinal text-white fw-bold py-3 d-flex justify-content-between align-items-center">
                     <span>Student Queuing History</span>
@@ -123,7 +214,7 @@
                                     <th>Ticket ID</th>
                                     <th>Service Request</th>
                                     <th>Status</th>
-                                    <th>Actions / Feedback</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -132,7 +223,6 @@
                                     <td class="fw-bold">#{{ t.id }}</td>
                                     <td>
                                         <div class="fw-bold text-dark">{{ t.request_type }}</div>
-                                        <small class="text-muted">Student ID: {{ t.student_id }}</small>
                                     </td>
                                     <td>
                                         {% if t.status == 'WAITING' %}
@@ -148,36 +238,12 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <a href="/ticket/{{ t.id }}" class="btn btn-outline-danger btn-sm fw-bold me-1">Track Live</a>
-                                        
-                                        {% if t.status == 'SERVED' %}
-                                            {% if t.feedback_rating %}
-                                                <span class="badge bg-light text-dark border ms-1">Rating: {{ t.feedback_rating }}★</span>
-                                            {% else %}
-                                                <button class="btn btn-sm btn-outline-success fw-bold" data-bs-toggle="collapse" data-bs-target="#feedbackForm{{ t.id }}">Rate Service</button>
-                                                <div class="collapse mt-2" id="feedbackForm{{ t.id }}">
-                                                    <form method="POST" action="/ticket/{{ t.id }}/feedback" class="p-2 border rounded bg-light">
-                                                        <select name="rating" class="form-select form-select-sm mb-1" required>
-                                                            <option value="5">5 ★★★★★ (Excellent)</option>
-                                                            <option value="4">4 ★★★★☆ (Good)</option>
-                                                            <option value="3">3 ★★★☆☆ (Satisfactory)</option>
-                                                            <option value="2">2 ★★☆☆☆ (Needs Improvement)</option>
-                                                            <option value="1">1 ★☆☆☆☆ (Poor)</option>
-                                                        </select>
-                                                        <input type="text" name="comment" class="form-control form-control-sm mb-1" placeholder="Optional comments...">
-                                                        <button type="submit" class="btn btn-success btn-sm w-100">Submit Rating</button>
-                                                    </form>
-                                                </div>
-                                            {% endif %}
-                                        {% endif %}
+                                        <a href="/ticket/{{ t.id }}" class="btn btn-outline-danger btn-sm fw-bold">Track</a>
                                     </td>
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted py-4">
-                                        No active or previous tickets found in your account history.
-                                        <div class="mt-2"><a href="/checkin" class="btn btn-sm btn-outline-danger fw-bold">Issue Priority Ticket</a></div>
-                                    </td>
+                                    <td colspan="4" class="text-center text-muted py-4">No active or previous tickets found in history.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -185,81 +251,130 @@
                     </div>
                 </div>
             </div>
-
             {% else %}
-
-            <!-- STAFF / ADMIN PROFILE VIEW: Servicing Overview & Employee Metrics -->
-            <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <!-- STAFF SERVICING OVERVIEW -->
+            <div class="card shadow-sm border-0 rounded-3">
                 <div class="card-header bg-dark text-white fw-bold py-3 d-flex justify-content-between align-items-center">
-                    <span>Registrar Employee Servicing Performance Overview</span>
-                    <span class="badge bg-warning text-dark text-uppercase">{{ user_info.role }} Portal</span>
+                    <span>Staff Servicing Overview</span>
+                    <span class="badge bg-warning text-dark text-uppercase">{{ user_info.role }}</span>
                 </div>
-                <div class="card-body p-4">
-                    <div class="row text-center g-3 mb-4">
-                        <div class="col-md-6">
-                            <div class="p-3 border rounded bg-light">
-                                <h2 class="fw-bold text-success mb-0">{{ staff_stats.total_served if staff_stats else 0 }}</h2>
-                                <span class="text-muted small fw-bold">Students Serviced by Staff Member</span>
+                <div class="card-body p-3">
+                    <div class="row text-center g-2 mb-3">
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <h3 class="fw-bold text-success mb-0">{{ staff_stats.total_served if staff_stats else 0 }}</h3>
+                                <small class="text-muted fw-bold">Total Serviced</small>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="p-3 border rounded bg-light">
-                                <h2 class="fw-bold text-secondary mb-0">{{ staff_stats.total_skipped if staff_stats else 0 }}</h2>
-                                <span class="text-muted small fw-bold">No-Show Tickets Skipped</span>
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <h3 class="fw-bold text-secondary mb-0">{{ staff_stats.total_skipped if staff_stats else 0 }}</h3>
+                                <small class="text-muted fw-bold">Skipped (No-Show)</small>
                             </div>
                         </div>
-                    </div>
-
-                    <h5 class="fw-bold text-mapua-cardinal mb-3">Recent Servicing Audit Trail</h5>
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-hover align-middle mb-0">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>Ticket ID</th>
-                                    <th>Student ID</th>
-                                    <th>Student Name</th>
-                                    <th>Service Request</th>
-                                    <th>Status</th>
-                                    <th>Staff Remarks</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% if staff_stats and staff_stats.history %}
-                                    {% for h in staff_stats.history %}
-                                    <tr>
-                                        <td>#{{ h.id }}</td>
-                                        <td>{{ h.student_id }}</td>
-                                        <td class="fw-bold">{{ h.full_name }}</td>
-                                        <td>{{ h.request_type }}</td>
-                                        <td>
-                                            {% if h.status == 'SERVED' %}
-                                                <span class="badge bg-success">SERVED</span>
-                                            {% else %}
-                                                <span class="badge bg-secondary">SKIPPED</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="small">{{ h.remarks }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-3">No recent ticket transactions recorded under your account.</td>
-                                    </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div class="d-flex gap-2 mt-4">
-                        <a href="/dashboard" class="btn btn-danger bg-mapua-cardinal fw-bold">Open Queue Monitor</a>
-                        <a href="/analytics" class="btn btn-dark fw-bold">View System Analytics</a>
-                        {% if user_info.role == 'admin' %}
-                            <a href="/admin/users" class="btn btn-warning fw-bold">Manage Staff Accounts</a>
-                        {% endif %}
                     </div>
                 </div>
             </div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Upload Avatar -->
+<div class="modal fade" id="uploadAvatarModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-mapua-cardinal text-white">
+                <h5 class="modal-title fw-bold">Upload Profile Picture</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="/profile" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="update_avatar">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Image File</label>
+                        <input type="file" name="avatar" class="form-control" accept="image/png, image/jpeg, image/jpg, image/webp" required>
+                        <div class="form-text small text-muted">Allowed formats: PNG, JPG, JPEG, WEBP (Max 2MB).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Initial Alignment</label>
+                        <select name="avatar_position" class="form-select">
+                            <option value="center" selected>Center (Default)</option>
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm bg-mapua-cardinal fw-bold">Upload Photo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Reposition Avatar -->
+<div class="modal fade" id="repositionAvatarModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold">Reposition Profile Picture</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="/profile">
+                <input type="hidden" name="action" value="reposition_avatar">
+                <div class="modal-body text-center">
+                    <div class="mb-3">
+                        <img src="{{ user_info.avatar_url }}" alt="Preview" class="rounded-circle avatar-lg mb-2" style="object-position: {{ user_info.avatar_position or 'center' }};">
+                    </div>
+                    <div class="mb-3 text-start">
+                        <label class="form-label fw-bold">Select Vertical Focus Point</label>
+                        <select name="avatar_position" class="form-select" required>
+                            <option value="center" {% if user_info.avatar_position == 'center' %}selected{% endif %}>Center (Balanced)</option>
+                            <option value="top" {% if user_info.avatar_position == 'top' %}selected{% endif %}>Top (Face / Head Focus)</option>
+                            <option value="bottom" {% if user_info.avatar_position == 'bottom' %}selected{% endif %}>Bottom (Lower Focus)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-dark btn-sm fw-bold">Save Position</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Edit Info -->
+<div class="modal fade" id="editInfoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-mapua-cardinal text-white">
+                <h5 class="modal-title fw-bold">Edit Basic Profile Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="/profile">
+                <input type="hidden" name="action" value="update_info">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Full Name</label>
+                        <input type="text" name="full_name" class="form-control" value="{{ user_info.full_name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Program / Office Department</label>
+                        <input type="text" name="program_dept" class="form-control" value="{{ user_info.program_dept or '' }}" placeholder="e.g. BS Computer Engineering">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Contact Phone Number</label>
+                        <input type="text" name="phone_number" class="form-control" value="{{ user_info.phone_number or '' }}" placeholder="e.g. +63 917 123 4567">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm bg-mapua-cardinal fw-bold">Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

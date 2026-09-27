@@ -394,7 +394,9 @@ CREATE TABLE IF NOT EXISTS staff_users (
     full_name TEXT NOT NULL,
     role TEXT CHECK(role IN ('staff', 'admin')) NOT NULL DEFAULT 'staff',
     program_dept TEXT NULL,
+    phone_number TEXT NULL,
     avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
+    avatar_position TEXT DEFAULT 'center',
     created_at REAL NOT NULL
 );
 
@@ -405,7 +407,9 @@ CREATE TABLE IF NOT EXISTS students (
     password_hash TEXT NOT NULL,
     full_name TEXT NOT NULL,
     program_dept TEXT NULL,
+    phone_number TEXT NULL,
     avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
+    avatar_position TEXT DEFAULT 'center',
     created_at REAL NOT NULL
 );
 
