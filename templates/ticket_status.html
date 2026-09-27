@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="refresh" content="10">
     <title>MapuaQ - Ticket #{{ ticket.id }} Status</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/logo_icon.svg">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .bg-mapua-cardinal { background-color: #800000; }
         .text-mapua-cardinal { color: #800000; }
+        .btn-mapua-cardinal { background-color: #800000; color: white; border: none; font-weight: 600; }
+        .btn-mapua-cardinal:hover { background-color: #600000; color: white; }
         .pulse-banner {
             animation: pulse 1.5s infinite;
         }
@@ -16,6 +19,12 @@
             0% { transform: scale(1); }
             50% { transform: scale(1.02); }
             100% { transform: scale(1); }
+        }
+        .timer-display {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: 2px;
         }
     </style>
 </head>
@@ -41,15 +50,78 @@
     </div>
 </nav>
 
-<div class="container my-auto py-5" style="max-width: 600px;">
+<div class="container my-auto py-5" style="max-width: 620px;">
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show mb-4 shadow-sm" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- CALLED ALERT BANNER & 5-MIN GRACE TIMER -->
     {% if ticket.status == 'CALLED' %}
-    <div class="alert alert-success border-success text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
-        <h2 class="fw-bold mb-1">📢 NOW SERVING!</h2>
-        <h4 class="mb-0">Please proceed immediately to the Registrar Counter.</h4>
-    </div>
+        <div class="alert alert-success border-success text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
+            <h2 class="fw-bold mb-1">📢 YOUR TICKET IS BEING CALLED AT COUNTER 1</h2>
+            <p class="mb-3 fs-5 fw-semibold text-dark">Please proceed immediately to the counter window with your valid Mapúa ID.</p>
+
+            <div class="bg-white p-3 rounded border border-success d-inline-block shadow-sm px-4">
+                <small class="text-uppercase fw-bold text-muted d-block mb-1">⏱️ 5-Minute Call Grace Clock</small>
+                <div id="callTimer" class="timer-display text-success">05:00</div>
+                <small id="callStatusText" class="text-secondary fw-bold">Remaining time before ticket is marked skipped</small>
+            </div>
+        </div>
+    {% elif ticket.status == 'SKIPPED' %}
+        <div class="card border-warning shadow-sm mb-4">
+            <div class="card-header bg-warning text-dark text-center py-3">
+                <h4 class="mb-0 fw-bold">⚠️ Call Window Missed</h4>
+                <small class="fw-semibold">1-Chance Penalty Re-Queue Window Active</small>
+            </div>
+            <div class="card-body p-4 text-center">
+                {% if ticket.rejoin_used == 0 %}
+                    <p class="text-dark fs-6 mb-3">
+                        You missed your counter call. You have <strong>15 minutes</strong> from the time of call to re-enter the queue.
+                    </p>
+                    <div class="bg-light p-3 rounded border mb-4 d-inline-block px-4">
+                        <small class="text-uppercase fw-bold text-muted d-block mb-1">⏱️ Re-Join Window Remaining</small>
+                        <div id="rejoinTimer" class="timer-display text-warning">15:00</div>
+                    </div>
+                    <div>
+                        <form method="POST" action="/ticket/{{ ticket.id }}/rejoin">
+                            <button type="submit" class="btn btn-warning btn-lg text-dark fw-bold px-4 py-3 shadow w-100">
+                                🔄 Re-join Queue with Penalty (+2.0 Offset)
+                            </button>
+                        </form>
+                        <small class="text-muted d-block mt-2">
+                            <em>Re-joining applies a +2.0 priority score penalty offset to maintain fairness for waiting students. This action can only be taken once.</em>
+                        </small>
+                    </div>
+                {% else %}
+                    <div class="p-3 bg-secondary bg-opacity-10 border rounded mb-3">
+                        <h5 class="fw-bold text-danger mb-2">Re-join Allowance Already Used</h5>
+                        <p class="text-muted mb-0">The 1-chance penalty re-join allowance has already been used for this ticket.</p>
+                    </div>
+                    <a href="/checkin" class="btn btn-mapua-cardinal px-4 py-2 fw-bold shadow-sm">
+                        Submit a New Ticket
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    {% elif ticket.status == 'CANCELLED' %}
+        <div class="alert alert-secondary text-center p-4 mb-4 shadow-sm rounded-3" role="alert">
+            <h4 class="fw-bold mb-1 text-danger">❌ Ticket Cancelled</h4>
+            <p class="text-muted mb-3">The 15-minute re-join window has expired. Please submit a new ticket to enter the queue.</p>
+            <a href="/checkin" class="btn btn-mapua-cardinal px-4 py-2 fw-bold shadow-sm">
+                Submit a New Ticket
+            </a>
+        </div>
     {% endif %}
 
+    <!-- Ticket Summary Card -->
     <div class="card shadow-sm border-0 rounded-3">
         <div class="card-header bg-mapua-cardinal text-white text-center py-4">
             <small class="text-uppercase tracking-wider opacity-75 fw-bold">Official Queue Ticket</small>
@@ -61,19 +133,25 @@
                 <p class="text-muted mb-0">Student ID: {{ ticket.student_id }}</p>
                 <div class="mt-2">
                     <span class="badge bg-secondary p-2 fs-6">{{ ticket.request_type }}</span>
+                    {% if ticket.penalty_offset and ticket.penalty_offset > 0 %}
+                        <span class="badge bg-warning text-dark p-2 fs-6 ms-1">+2.0 Penalty Offset</span>
+                    {% endif %}
                 </div>
             </div>
 
             <hr class="my-4">
 
-            <!-- Status Card Info -->
+            <!-- Status Details -->
             <div class="text-center">
-                <h6 class="text-muted text-uppercase fw-bold mb-2">Current Ticket Status</h6>
+                <h6 class="text-muted text-uppercase fw-bold mb-2">Current Status</h6>
                 
                 {% if ticket.status == 'WAITING' %}
                     <div class="p-3 bg-warning bg-opacity-10 border border-warning rounded-3 mb-3">
                         <h3 class="fw-bold text-warning text-dark mb-1">In Queue (Waiting)</h3>
                         <p class="text-muted mb-0">Your ticket is active in the priority scheduling queue.</p>
+                        {% if ticket.penalty_offset and ticket.penalty_offset > 0 %}
+                            <small class="text-danger fw-bold d-block mt-1">⚠️ Priority Penalty Offset Active (+2.0 points)</small>
+                        {% endif %}
                     </div>
 
                     <div class="row g-3 mt-2">
@@ -93,11 +171,11 @@
                 {% elif ticket.status == 'CALLED' %}
                     <div class="p-3 bg-success text-white rounded-3 mb-3">
                         <h3 class="fw-bold mb-1">BEING CALLED</h3>
-                        <p class="mb-0">Registrar staff are ready to assist you now.</p>
+                        <p class="mb-0">Registrar staff are ready to assist you at Counter Window 1.</p>
                     </div>
                 {% elif ticket.status == 'SERVED' %}
                     <div class="p-3 bg-success bg-opacity-10 border border-success rounded-3 mb-3">
-                        <h3 class="fw-bold text-success mb-1">Completed / Served</h3>
+                        <h3 class="fw-bold text-success mb-1">✓ Completed / Served</h3>
                         <p class="text-muted mb-0">Your transaction was processed successfully.</p>
                     </div>
                 {% endif %}
@@ -115,5 +193,54 @@
     <small>&copy; 2026 Mapúa University Registrar Priority System</small>
 </footer>
 
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // 5-Minute Call Grace Countdown Timer (for CALLED tickets)
+    const calledAt = Number("{{ ticket.called_at or 0 }}");
+    const callTimerEl = document.getElementById("callTimer");
+    if (calledAt > 0 && callTimerEl) {
+        function updateCallTimer() {
+            const now = Date.now() / 1000;
+            const elapsed = Math.floor(now - calledAt);
+            const remaining = Math.max(0, 300 - elapsed);
+            const mins = String(Math.floor(remaining / 60)).padStart(2, '0');
+            const secs = String(remaining % 60).padStart(2, '0');
+            callTimerEl.textContent = mins + ":" + secs;
+            if (remaining <= 0) {
+                callTimerEl.classList.remove("text-success");
+                callTimerEl.classList.add("text-danger");
+                const statusText = document.getElementById("callStatusText");
+                if (statusText) {
+                    statusText.textContent = "Grace Period Expired (Student No-Show)";
+                    statusText.classList.add("text-danger");
+                }
+            }
+        }
+        updateCallTimer();
+        setInterval(updateCallTimer, 1000);
+    }
+
+    // 15-Minute Re-Join Window Countdown Timer (for SKIPPED tickets)
+    const skippedAt = Number("{{ ticket.skipped_at or 0 }}");
+    const rejoinTimerEl = document.getElementById("rejoinTimer");
+    if (skippedAt > 0 && rejoinTimerEl) {
+        function updateRejoinTimer() {
+            const now = Date.now() / 1000;
+            const elapsed = Math.floor(now - skippedAt);
+            const remaining = Math.max(0, 900 - elapsed);
+            const mins = String(Math.floor(remaining / 60)).padStart(2, '0');
+            const secs = String(remaining % 60).padStart(2, '0');
+            rejoinTimerEl.textContent = mins + ":" + secs;
+            if (remaining <= 0) {
+                window.location.reload();
+            }
+        }
+        updateRejoinTimer();
+        setInterval(updateRejoinTimer, 1000);
+    }
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

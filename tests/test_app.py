@@ -420,6 +420,101 @@ class TestMapuaQRoutes(unittest.TestCase):
             self.assertEqual(sess["user"]["email"], "jaddeleon@mymail.mapua.edu.ph")
             self.assertEqual(sess["user"]["role"], "student")
 
+    def test_grace_period_and_penalty_rejoin_engine(self):
+        """Verifies ticket call, skip (no-show), and 1-chance penalty re-queuing with +2.0 score offset."""
+        # Arrange: Provision student and log in
+        self._login_as_admin()
+        self.client.post("/admin/users", data={
+            "student_id": "2024999001",
+            "email": "testrejoin@mymail.mapua.edu.ph",
+            "full_name": "Rejoin Test Student",
+            "program_dept": "BS CS",
+            "password": "StudentPass2026!",
+            "role": "student"
+        })
+
+        # Submit ticket
+        self.client.post("/checkin", data={
+            "student_id": "2024999001",
+            "full_name": "Rejoin Test Student",
+            "email": "testrejoin@mymail.mapua.edu.ph",
+            "request_type": "Course Completion",
+            "grade_level": "Junior"
+        })
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, priority_score FROM tickets WHERE student_id = '2024999001'")
+        t_row = cursor.fetchone()
+        t_id, initial_score = t_row[0], t_row[1]
+        conn.close()
+
+        # Step 1: Staff calls ticket
+        self.client.post(f"/tickets/{t_id}/call", follow_redirects=True)
+
+        # Step 2: Staff marks ticket as SKIPPED
+        self.client.post(f"/tickets/{t_id}/skip", data={"skip_reason": "No-show"}, follow_redirects=True)
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, skipped_at, rejoin_used FROM tickets WHERE id = ?", (t_id,))
+        s_row = cursor.fetchone()
+        conn.close()
+
+        self.assertEqual(s_row[0], "SKIPPED")
+        self.assertIsNotNone(s_row[1])
+        self.assertEqual(s_row[2], 0)
+
+        # Step 3: Student re-joins queue with penalty
+        self.client.get("/logout")
+        self.client.post("/login", data={
+            "identifier": "2024999001",
+            "password": "StudentPass2026!"
+        })
+
+        rejoin_res = self.client.post(f"/tickets/{t_id}/rejoin", follow_redirects=True)
+
+        self.assertEqual(rejoin_res.status_code, 200)
+        self.assertIn(b"re-joined the queue", rejoin_res.data)
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, rejoin_used, penalty_offset, priority_score FROM tickets WHERE id = ?", (t_id,))
+        r_row = cursor.fetchone()
+        conn.close()
+
+        self.assertEqual(r_row[0], "WAITING")
+        self.assertEqual(r_row[1], 1)
+        self.assertEqual(r_row[2], 2.0)
+        self.assertAlmostEqual(r_row[3], initial_score + 2.0, places=1)
+
+    def test_rejoin_expiry_and_one_chance_limit(self):
+        """Verifies 15-minute expiry cancels skipped ticket and 1-chance limit prevents duplicate re-queuing."""
+        # Arrange: Create SKIPPED ticket with skipped_at older than 15 minutes (1000s ago)
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        old_skipped_at = time.time() - 1000
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, skipped_at, rejoin_used)
+            VALUES ('2024999002', 'Expired Student', 'expired@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'SKIPPED', ?, 0)
+        """, (time.time() - 1200, old_skipped_at))
+        exp_tid = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Act: Requesting ticket status triggers lazy check which auto-cancels expired ticket
+        res = self.client.get(f"/ticket/{exp_tid}")
+
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Ticket Cancelled", res.data)
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM tickets WHERE id = ?", (exp_tid,))
+        status = cursor.fetchone()[0]
+        conn.close()
+        self.assertEqual(status, "CANCELLED")
+
 
 if __name__ == "__main__":
     unittest.main()

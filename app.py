@@ -99,6 +99,16 @@ def init_db():
     if "phone_number" not in st_cols:
         cursor.execute("ALTER TABLE students ADD COLUMN phone_number TEXT NULL")
 
+    # Migration check: ensure skipped_at, rejoin_used, and penalty_offset exist in tickets
+    cursor.execute("PRAGMA table_info(tickets)")
+    tk_cols = [row[1] for row in cursor.fetchall()]
+    if "skipped_at" not in tk_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN skipped_at REAL NULL")
+    if "rejoin_used" not in tk_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN rejoin_used INTEGER DEFAULT 0")
+    if "penalty_offset" not in tk_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN penalty_offset REAL DEFAULT 0.0")
+
     conn.commit()
 
     # Seed default Admin account into staff_users if missing
@@ -121,11 +131,20 @@ def init_db():
         """, (staff_pass_hash, time.time()))
         conn.commit()
 
-    # Purge all student accounts and active tickets as requested
-    cursor.execute("DELETE FROM students")
-    cursor.execute("DELETE FROM tickets")
-    conn.commit()
+    conn.close()
 
+
+def check_and_expire_skipped_tickets():
+    """Checks for SKIPPED tickets where skipped_at is older than 15 minutes (900s) and auto-cancels them."""
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    cutoff = time.time() - 900
+    cursor.execute("""
+        UPDATE tickets
+        SET status = 'CANCELLED', remarks = '15-minute re-join window expired (No re-queue request received)'
+        WHERE status = 'SKIPPED' AND skipped_at IS NOT NULL AND skipped_at < ?
+    """, (cutoff,))
+    conn.commit()
     conn.close()
 
 
@@ -163,12 +182,13 @@ def admin_required(f):
 
 
 def load_queue_from_db() -> RegistrarMinHeapQueue:
-    """Loads active waiting tickets from SQLite, calculates dynamic aging, and returns Min-Heap Queue."""
+    """Loads active waiting tickets from SQLite, calculates dynamic aging and penalties, and returns Min-Heap Queue."""
+    check_and_expire_skipped_tickets()
     queue = RegistrarMinHeapQueue(strategy)
     conn = sqlite3.connect(DB)
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp
+        SELECT id, student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, penalty_offset, skipped_at, rejoin_used
         FROM tickets WHERE status = 'WAITING'
     """)
     rows = cursor.fetchall()
@@ -183,7 +203,10 @@ def load_queue_from_db() -> RegistrarMinHeapQueue:
             request_weight=r[4],
             standing_name=r[5],
             standing_weight=r[6],
-            arrival_timestamp=r[7]
+            arrival_timestamp=r[7],
+            penalty_offset=r[8] if r[8] is not None else 0.0,
+            skipped_at=r[9],
+            rejoin_used=r[10] if r[10] is not None else 0
         )
         queue.push(ticket)
     
@@ -659,11 +682,13 @@ def checkin():
 
 @app.route("/ticket/<int:ticket_id>")
 def ticket_status(ticket_id: int):
-    """Student live ticket tracking status view with 10s auto-refresh."""
+    """Student live ticket tracking status view with 10s auto-refresh and grace/rejoin countdowns."""
+    check_and_expire_skipped_tickets()
+
     conn = sqlite3.connect(DB)
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, served_at, served_by, feedback_rating, feedback_comment
+        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, served_at, served_by, feedback_rating, feedback_comment, called_at, skipped_at, rejoin_used, penalty_offset, remarks
         FROM tickets WHERE id = ?
     """, (ticket_id,))
     row = cursor.fetchone()
@@ -683,7 +708,12 @@ def ticket_status(ticket_id: int):
         "served_at": row[6],
         "served_by": row[7],
         "feedback_rating": row[8],
-        "feedback_comment": row[9]
+        "feedback_comment": row[9],
+        "called_at": row[10],
+        "skipped_at": row[11],
+        "rejoin_used": row[12] or 0,
+        "penalty_offset": row[13] or 0.0,
+        "remarks": row[14]
     }
 
     students_ahead = 0
@@ -913,7 +943,7 @@ def mark_serve(ticket_id: int):
 @app.route("/ticket/<int:ticket_id>/skip", methods=["POST"])
 @staff_required
 def mark_skip(ticket_id: int):
-    """Marks ticket as SKIPPED (No-Show) with reason and frees counter."""
+    """Marks ticket as SKIPPED (No-Show) with reason, records skipped_at timestamp, and frees counter."""
     skip_reason = request.form.get("skip_reason", "").strip() or request.form.get("remarks", "").strip()
     if not skip_reason:
         skip_reason = "No-show during 5-minute call window"
@@ -922,13 +952,71 @@ def mark_skip(ticket_id: int):
     conn = sqlite3.connect(DB)
     conn.execute("""
         UPDATE tickets
-        SET status = 'SKIPPED', served_at = ?, served_by = ?, remarks = ?
+        SET status = 'SKIPPED', skipped_at = ?, served_at = ?, served_by = ?, remarks = ?
         WHERE id = ?
-    """, (time.time(), current_user, skip_reason, ticket_id))
+    """, (time.time(), time.time(), current_user, skip_reason, ticket_id))
     conn.commit()
     conn.close()
-    flash(f"Ticket #{ticket_id} marked as SKIPPED (No-Show).", "warning")
+    flash(f"Ticket #{ticket_id} marked as SKIPPED (No-Show). 15-minute re-join window initiated.", "warning")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/tickets/<int:ticket_id>/rejoin", methods=["POST"])
+@app.route("/ticket/<int:ticket_id>/rejoin", methods=["POST"])
+@login_required
+def rejoin_ticket(ticket_id: int):
+    """Re-queues a SKIPPED ticket back into WAITING state with a +2.0 priority penalty offset if within 15 mins."""
+    check_and_expire_skipped_tickets()
+
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, status, skipped_at, rejoin_used, penalty_offset
+        FROM tickets WHERE id = ?
+    """, (ticket_id,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
+        flash("Ticket not found.", "danger")
+        return redirect(url_for("student_dashboard"))
+
+    t_id, user_id, std_id, name, email, req_type, req_w, lvl_name, lvl_w, arr_ts, status, skipped_at, rejoin_used, current_penalty = row
+
+    if status != "SKIPPED":
+        conn.close()
+        flash("Only SKIPPED tickets within the 15-minute grace window can re-join the queue.", "danger")
+        return redirect(url_for("ticket_status", ticket_id=ticket_id))
+
+    if rejoin_used:
+        conn.close()
+        flash("Re-join allowance has already been used for this ticket. Please submit a new ticket.", "danger")
+        return redirect(url_for("ticket_status", ticket_id=ticket_id))
+
+    if skipped_at and (time.time() - skipped_at > 900):
+        cursor.execute("UPDATE tickets SET status = 'CANCELLED', remarks = '15-minute re-join window expired' WHERE id = ?", (ticket_id,))
+        conn.commit()
+        conn.close()
+        flash("The 15-minute re-join window has expired. Ticket has been cancelled.", "danger")
+        return redirect(url_for("ticket_status", ticket_id=ticket_id))
+
+    # Apply 1-chance penalty (+2.0 offset)
+    new_penalty = (current_penalty or 0.0) + 2.0
+    new_score = strategy.calculate_score(req_w, lvl_w, arr_ts, penalty_offset=new_penalty)
+
+    cursor.execute("""
+        UPDATE tickets
+        SET status = 'WAITING', rejoin_used = 1, penalty_offset = ?, priority_score = ?, remarks = 'Re-joined queue with +2.0 priority penalty'
+        WHERE id = ?
+    """, (new_penalty, new_score, ticket_id))
+    conn.commit()
+    conn.close()
+
+    # Re-heapify in memory
+    load_queue_from_db()
+
+    flash(f"Ticket #{ticket_id} successfully re-joined the queue! A +2.0 priority penalty offset has been applied.", "success")
+    return redirect(url_for("ticket_status", ticket_id=ticket_id))
 
 
 @app.route("/analytics")

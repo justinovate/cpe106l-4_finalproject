@@ -1,7 +1,7 @@
 """
 CPE106L-4 Software Design Laboratory
 Sprint 1 Working Proof of Concept (POC)
-Modules: Strategy Pattern Scoring & Binary Min-Heap Priority Queue
+Modules: Strategy Pattern Scoring & Binary Min-Heap Priority Queue with Re-queue Penalty Offset Engine
 """
 
 import time
@@ -10,21 +10,21 @@ import heapq
 
 class PriorityCalculationStrategy:
     """Strategy interface for computing student priority scores."""
-    def calculate_score(self, request_weight: int, standing_weight: int, arrival_timestamp: float) -> float:
+    def calculate_score(self, request_weight: int, standing_weight: int, arrival_timestamp: float, penalty_offset: float = 0.0) -> float:
         raise NotImplementedError("Subclasses must implement calculate_score().")
 
 
 class StandardRegistrarStrategy(PriorityCalculationStrategy):
     """
-    Standard Priority Formula:
-    Score = (W_request * 0.60) + (W_standing * 0.40) - Dynamic Aging
+    Standard Priority Formula with Re-queue Penalty Offset:
+    Score = (W_request * 0.60) + (W_standing * 0.40) - Dynamic Aging + penalty_offset
     Lower score = Higher priority.
     """
-    def calculate_score(self, request_weight: int, standing_weight: int, arrival_timestamp: float) -> float:
+    def calculate_score(self, request_weight: int, standing_weight: int, arrival_timestamp: float, penalty_offset: float = 0.0) -> float:
         elapsed_minutes = (time.time() - arrival_timestamp) / 60.0
         aging_discount = elapsed_minutes / 15.0  # Deduct 1.0 point every 15 mins of waiting
         base_score = (request_weight * 0.60) + (standing_weight * 0.40)
-        final_score = max(0.1, base_score - aging_discount)
+        final_score = max(0.1, base_score - aging_discount + penalty_offset)
         return round(final_score, 2)
 
 
@@ -36,6 +36,9 @@ class StudentTicket:
                  arrival_timestamp: float = None,
                  status: str = "WAITING",
                  called_at: float = None,
+                 skipped_at: float = None,
+                 rejoin_used: int = 0,
+                 penalty_offset: float = 0.0,
                  remarks: str = None):
         self.ticket_id = ticket_id
         self.student_id = student_id
@@ -47,6 +50,9 @@ class StudentTicket:
         self.arrival_timestamp = arrival_timestamp if arrival_timestamp is not None else time.time()
         self.status = status
         self.called_at = called_at
+        self.skipped_at = skipped_at
+        self.rejoin_used = rejoin_used
+        self.penalty_offset = penalty_offset
         self.remarks = remarks
         self.priority_score = 0.0
 
@@ -56,7 +62,7 @@ class StudentTicket:
 
     def update_score(self, strategy: PriorityCalculationStrategy):
         self.priority_score = strategy.calculate_score(
-            self.request_weight, self.standing_weight, self.arrival_timestamp
+            self.request_weight, self.standing_weight, self.arrival_timestamp, self.penalty_offset
         )
 
     # Invariant: Lowest priority score sits at index 0 (root of min-heap)
@@ -67,7 +73,7 @@ class StudentTicket:
 
 
 class RegistrarMinHeapQueue:
-    """Binary Min-Heap Priority Queue."""
+    """Binary Min-Heap Priority Queue with Re-queue Penalty Support."""
     def __init__(self, strategy: PriorityCalculationStrategy):
         self._heap = []
         self.strategy = strategy
@@ -77,7 +83,7 @@ class RegistrarMinHeapQueue:
         heapq.heappush(self._heap, ticket)
 
     def refresh_scores(self):
-        """Recalculate dynamic aging scores for all tickets and re-heapify."""
+        """Recalculate dynamic aging scores and penalties for all tickets and re-heapify."""
         for ticket in self._heap:
             ticket.update_score(self.strategy)
         heapq.heapify(self._heap)

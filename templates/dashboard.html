@@ -64,7 +64,10 @@
     <div class="card border-success mb-4 shadow-sm">
         <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center py-2">
             <span>NOW SERVING AT COUNTER</span>
-            <span class="badge bg-light text-success fw-bold">CALLED — Active Student at Counter</span>
+            <div class="d-flex align-items-center gap-2">
+                <span id="dashboardGraceAlertBadge" class="badge bg-danger pulse-badge d-none">⚠️ Grace Period Expired (Student No-Show)</span>
+                <span class="badge bg-light text-success fw-bold">CALLED — Active Student at Counter</span>
+            </div>
         </div>
         <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center p-4 gap-3">
             <div>
@@ -73,14 +76,19 @@
                     <span class="fs-6 text-muted">({{ called_ticket.student_id }})</span>
                 </h3>
                 <p class="mb-2 text-dark fs-5"><strong>Service Request:</strong> {{ called_ticket.request_type }} <span class="badge bg-secondary fs-6 ms-2">{{ called_ticket.grade_level }}</span></p>
-                <div>
-                    <span class="badge bg-info text-dark me-2">Called {{ called_ticket.elapsed_called_mins }} mins ago</span>
-                    <span class="badge bg-dark">Counter Staff: {{ called_ticket.served_by or user.full_name }}</span>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge bg-info text-dark fs-6">
+                        ⏱️ Elapsed Call Clock: <span id="dashboardElapsedClock">00:00</span>
+                    </span>
+                    <span class="badge bg-warning text-dark fs-6">
+                        ⏳ Grace Window Remaining: <span id="dashboardGraceClock">05:00</span>
+                    </span>
+                    <span class="badge bg-dark fs-6">Counter Staff: {{ called_ticket.served_by or user.full_name }}</span>
                 </div>
             </div>
             <div class="d-flex gap-2 align-self-start align-self-md-center">
                 <button type="button" class="btn btn-success btn-lg px-4 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#serveModal{{ called_ticket.id }}">
-                    ✓ Complete & Mark Served
+                    ✓ Complete &amp; Mark Served
                 </button>
                 <button type="button" class="btn btn-outline-danger btn-lg px-4 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#skipModal{{ called_ticket.id }}">
                     ⚠️ Skip (No-Show)
@@ -272,7 +280,12 @@
                         <td><span class="badge bg-secondary">{{ t.standing_name }}</span></td>
                         <td>{{ t.request_name }}</td>
                         <td>{{ t.elapsed_minutes }} mins</td>
-                        <td><span class="badge bg-danger">{{ t.priority_score }}</span></td>
+                        <td>
+                            <span class="badge bg-danger">{{ t.priority_score }}</span>
+                            {% if t.penalty_offset and t.penalty_offset > 0 %}
+                                <span class="badge bg-warning text-dark ms-1">+2.0 Penalty</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if called_ticket %}
                                 <button class="btn btn-sm btn-outline-secondary" disabled title="Complete current active ticket first">Locked</button>
@@ -399,6 +412,37 @@
     {% endif %}
 
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const calledAt = Number("{{ called_ticket.called_at if called_ticket else 0 }}");
+    const graceClockEl = document.getElementById("dashboardGraceClock");
+    const elapsedClockEl = document.getElementById("dashboardElapsedClock");
+    const graceAlertBadgeEl = document.getElementById("dashboardGraceAlertBadge");
+
+    if (calledAt > 0) {
+        function updateDashboardTimer() {
+            const now = Date.now() / 1000;
+            const elapsed = Math.floor(now - calledAt);
+            const remaining = Math.max(0, 300 - elapsed);
+
+            const elapsedMins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const elapsedSecs = String(elapsed % 60).padStart(2, '0');
+            if (elapsedClockEl) elapsedClockEl.textContent = elapsedMins + ":" + elapsedSecs;
+
+            const graceMins = String(Math.floor(remaining / 60)).padStart(2, '0');
+            const graceSecs = String(remaining % 60).padStart(2, '0');
+            if (graceClockEl) graceClockEl.textContent = graceMins + ":" + graceSecs;
+
+            if (remaining <= 0 && graceAlertBadgeEl) {
+                graceAlertBadgeEl.classList.remove("d-none");
+            }
+        }
+        updateDashboardTimer();
+        setInterval(updateDashboardTimer, 1000);
+    }
+});
+</script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
