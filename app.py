@@ -370,7 +370,7 @@ def profile():
         conn.close()
         return redirect(url_for("profile"))
 
-    # Fetch User Info & Ticket History
+    # Fetch User Info & Role-Specific Profile Data
     conn = sqlite3.connect(DB)
     cursor = conn.cursor()
     cursor.execute("""
@@ -390,32 +390,70 @@ def profile():
         "created_at": u_row[7]
     }
 
-    # Fetch user's tickets
-    cursor.execute("""
-        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment
-        FROM tickets
-        WHERE user_id = ? OR email = ? OR student_id = ?
-        ORDER BY arrival_timestamp DESC
-    """, (user_id, user_info["email"], user_info["student_id"]))
-    t_rows = cursor.fetchall()
+    my_tickets = []
+    staff_stats = None
+
+    if user_info["role"] == "student":
+        # Student Profile: Fetch student's queued tickets and ratings
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment
+            FROM tickets
+            WHERE user_id = ? OR email = ? OR (student_id IS NOT NULL AND student_id = ?)
+            ORDER BY arrival_timestamp DESC
+        """, (user_id, user_info["email"], user_info["student_id"]))
+        t_rows = cursor.fetchall()
+
+        for r in t_rows:
+            my_tickets.append({
+                "id": r[0],
+                "student_id": r[1],
+                "full_name": r[2],
+                "request_type": r[3],
+                "arrival_timestamp": r[4],
+                "status": r[5],
+                "priority_score": r[6],
+                "served_at": r[7],
+                "feedback_rating": r[8],
+                "feedback_comment": r[9]
+            })
+    else:
+        # Staff / Admin Profile: Fetch staff servicing statistics and audit records
+        staff_identifier = user_info["email"]
+        cursor.execute("SELECT COUNT(*) FROM tickets WHERE served_by = ? AND status = 'SERVED'", (staff_identifier,))
+        total_served = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM tickets WHERE served_by = ? AND status = 'SKIPPED'", (staff_identifier,))
+        total_skipped = cursor.fetchone()[0]
+
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, served_at, status, remarks
+            FROM tickets
+            WHERE served_by = ?
+            ORDER BY served_at DESC
+            LIMIT 15
+        """, (staff_identifier,))
+        s_rows = cursor.fetchall()
+
+        staff_history = []
+        for r in s_rows:
+            staff_history.append({
+                "id": r[0],
+                "student_id": r[1],
+                "full_name": r[2],
+                "request_type": r[3],
+                "served_at": r[4],
+                "status": r[5],
+                "remarks": r[6] or "—"
+            })
+
+        staff_stats = {
+            "total_served": total_served,
+            "total_skipped": total_skipped,
+            "history": staff_history
+        }
+
     conn.close()
 
-    my_tickets = []
-    for r in t_rows:
-        my_tickets.append({
-            "id": r[0],
-            "student_id": r[1],
-            "full_name": r[2],
-            "request_type": r[3],
-            "arrival_timestamp": r[4],
-            "status": r[5],
-            "priority_score": r[6],
-            "served_at": r[7],
-            "feedback_rating": r[8],
-            "feedback_comment": r[9]
-        })
-
-    return render_template("profile.html", user_info=user_info, tickets=my_tickets, user=session.get("user"))
+    return render_template("profile.html", user_info=user_info, tickets=my_tickets, staff_stats=staff_stats, user=session.get("user"))
 
 
 @app.route("/checkin", methods=["GET", "POST"])

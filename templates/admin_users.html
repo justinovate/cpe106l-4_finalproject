@@ -93,11 +93,13 @@
             </div>
         </div>
 
-        <!-- Registered Users Table -->
+        <!-- Registered Users Table (Separated by Role) -->
         <div class="col-md-7">
-            <div class="card shadow-sm border-0 rounded-3">
-                <div class="card-header bg-dark text-white fw-bold py-3">
-                    Registered System Accounts
+            <!-- Staff & Admin Accounts Card -->
+            <div class="card shadow-sm border-0 rounded-3 mb-4">
+                <div class="card-header bg-dark text-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span>Registrar Staff &amp; Administrator Accounts</span>
+                    <span class="badge bg-warning text-dark">Employee Portal Access</span>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -107,32 +109,77 @@
                                     <th>ID</th>
                                     <th>Email / ID</th>
                                     <th>Full Name</th>
-                                    <th>Role</th>
+                                    <th>Role &amp; Office</th>
                                 </tr>
                             </thead>
                             <tbody>
+                                {% set staff_found = false %}
                                 {% for u in users %}
-                                <tr>
-                                    <td>#{{ u[0] }}</td>
-                                    <td>
-                                        <div class="fw-bold">{{ u[2] }}</div>
-                                        <small class="text-muted">{{ u[1] or 'No ID' }}</small>
-                                    </td>
-                                    <td>{{ u[3] }}</td>
-                                    <td>
-                                        {% if u[4] == 'admin' %}
-                                            <span class="badge bg-danger">ADMIN</span>
-                                        {% elif u[4] == 'staff' %}
-                                            <span class="badge bg-success">STAFF</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">STUDENT</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
+                                    {% if u[4] in ('staff', 'admin') %}
+                                    {% set staff_found = true %}
+                                    <tr>
+                                        <td>#{{ u[0] }}</td>
+                                        <td>
+                                            <div class="fw-bold text-dark">{{ u[2] }}</div>
+                                            <small class="text-muted">Emp ID: {{ u[1] or 'Admin' }}</small>
+                                        </td>
+                                        <td class="fw-bold">{{ u[3] }}</td>
+                                        <td>
+                                            {% if u[4] == 'admin' %}
+                                                <span class="badge bg-danger">ADMIN</span>
+                                            {% else %}
+                                                <span class="badge bg-success">STAFF</span>
+                                            {% endif %}
+                                            <small class="d-block text-muted">{{ u[5] or 'Registrar Counter' }}</small>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
                                 {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-3">No staff accounts found.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Student Accounts Card -->
+            <div class="card shadow-sm border-0 rounded-3">
+                <div class="card-header bg-secondary text-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span>Registered Student Accounts</span>
+                    <span class="badge bg-light text-dark">Student Portal Access</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted py-3">No user accounts found.</td>
+                                    <th>ID</th>
+                                    <th>Student ID</th>
+                                    <th>MyMail Email</th>
+                                    <th>Student Name</th>
+                                    <th>Program / Dept</th>
                                 </tr>
+                            </thead>
+                            <tbody>
+                                {% set student_found = false %}
+                                {% for u in users %}
+                                    {% if u[4] == 'student' %}
+                                    {% set student_found = true %}
+                                    <tr>
+                                        <td>#{{ u[0] }}</td>
+                                        <td class="fw-bold">{{ u[1] or 'N/A' }}</td>
+                                        <td><span class="text-primary">{{ u[2] }}</span></td>
+                                        <td class="fw-bold">{{ u[3] }}</td>
+                                        <td><span class="badge bg-light text-dark border">{{ u[5] or 'Mapúa Student' }}</span></td>
+                                    </tr>
+                                    {% endif %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-3">No registered student accounts found.</td>
+                                    </tr>
                                 {% endfor %}
                             </tbody>
                         </table>

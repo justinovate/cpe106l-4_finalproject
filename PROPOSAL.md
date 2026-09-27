@@ -287,26 +287,37 @@ sequenceDiagram
     Student->>App: GET /ticket/<ticket_id> (Auto-refreshes 10s)
     App-->>Student: Render ticket_status.html (Students Ahead & Est. Wait Time)
 
-    %% Staff Queue Monitor & Call Flow
+    %% Staff Queue Monitor & Heap Engine Sync
     Staff->>App: GET /dashboard
+    App->>DB: SELECT * FROM tickets WHERE status='CALLED' (Check active counter ticket)
     App->>DB: SELECT * FROM tickets WHERE status='WAITING'
-    DB-->>App: Return active ticket records
+    DB-->>App: Return active WAITING ticket records
     App->>Heap: Instantiate & push(ticket)
     Heap->>Strategy: calculate_score(...) [computes dynamic aging]
     Strategy-->>Heap: Return updated score
     App->>Heap: refresh_scores() & heapify()
     App->>Heap: peek() & get_sorted_list()
     Heap-->>App: Return root ticket & sorted list
-    App-->>Staff: Render dashboard.html (Active Queue & Window Counter)
+    App-->>Staff: Render dashboard.html (Active Counter & Queue Table)
 
-    %% Call & Serve Ticket Flow
-    Staff->>App: POST /call-next
-    App->>DB: UPDATE tickets SET status='CALLED', called_at=time.time() WHERE id=top.id
-    DB-->>App: Confirm row updated
-    Staff->>App: POST /ticket/<id>/serve
-    App->>DB: UPDATE tickets SET status='SERVED', served_at=time.time(), served_by=email
-    DB-->>App: Confirm row updated
-    App-->>Staff: Redirect GET /dashboard
+    %% Decoupled Call, Serve, and Skip Actions
+    Staff->>App: POST /tickets/<id>/call
+    App->>DB: Check concurrency (active CALLED ticket)
+    App->>DB: UPDATE tickets SET status='CALLED', called_at=time.time() WHERE id=<id>
+    DB-->>App: Confirm ticket CALLED
+    Staff-->>App: Redirect GET /dashboard (Display active student banner)
+
+    alt Option A: Complete Service with Remarks
+        Staff->>App: POST /tickets/<id>/serve (remarks="Issued TOR. Paid at Cashier.")
+        App->>DB: UPDATE tickets SET status='SERVED', served_at=time.time(), served_by=email, remarks=remarks
+        DB-->>App: Confirm ticket SERVED
+        App-->>Staff: Redirect GET /dashboard
+    else Option B: Skip Student No-Show
+        Staff->>App: POST /tickets/<id>/skip (skip_reason="No-show during 5-min window")
+        App->>DB: UPDATE tickets SET status='SKIPPED', served_at=time.time(), served_by=email, remarks=skip_reason
+        DB-->>App: Confirm ticket SKIPPED
+        App-->>Staff: Redirect GET /dashboard
+    end
 
     %% Student Feedback Submission
     Student->>App: POST /ticket/<id>/feedback (rating=5, comment="Fast service!")
