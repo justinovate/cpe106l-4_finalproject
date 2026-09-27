@@ -651,7 +651,7 @@ class TestMapuaQRoutes(unittest.TestCase):
         # Admin resets student password
         res = self.client.post(f"/admin/users/{st_id}/reset-password", data={"target_type": "student"}, follow_redirects=True)
         self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Temporary password generated and emailed to resetadmin@mymail.mapua.edu.ph.", res.data)
+        self.assertIn(b"Password for Reset Admin Student reset to:", res.data)
 
         # Check DB state
         conn = sqlite3.connect(DB)
@@ -793,6 +793,59 @@ class TestMapuaQRoutes(unittest.TestCase):
         res = self.client.post("/resend-verification", follow_redirects=True)
         self.assertEqual(res.status_code, 200)
         self.assertIn(b"fresh email verification link has been dispatched", res.data)
+
+    def test_void_ticket_route_soft_delete(self):
+        """Verifies POST /tickets/<id>/void sets status=CANCELLED with void remarks."""
+        self._login_as_admin()
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2024999010', 'Void Test Student', 'voidtest@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
+        """, (time.time(),))
+        t_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        res = self.client.post(f"/tickets/{t_id}/void", data={"void_reason": "Duplicate Request"}, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"marked as voided/cancelled", res.data)
+
+        # Check DB state
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, remarks FROM tickets WHERE id = ?", (t_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        self.assertEqual(row[0], "CANCELLED")
+        self.assertIn("Voided: Duplicate Request", row[1])
+
+    def test_delete_ticket_route_admin_hard_delete(self):
+        """Verifies POST /tickets/<id>/delete permanently removes ticket record from DB for Admin."""
+        self._login_as_admin()
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2024999011', 'Delete Test Student', 'deletetest@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
+        """, (time.time(),))
+        t_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        res = self.client.post(f"/tickets/{t_id}/delete", follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"permanently deleted from database", res.data)
+
+        # Verify DB deletion
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tickets WHERE id = ?", (t_id,))
+        count = cursor.fetchone()[0]
+        conn.close()
+
+        self.assertEqual(count, 0)
 
 
 if __name__ == "__main__":

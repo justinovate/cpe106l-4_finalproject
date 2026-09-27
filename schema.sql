@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     arrival_timestamp REAL NOT NULL,
     priority_score REAL NOT NULL,
     penalty_offset REAL DEFAULT 0.0,
-    status TEXT CHECK(status IN ('WAITING', 'CALLED', 'SERVED', 'SKIPPED', 'CANCELLED')) DEFAULT 'WAITING',
+    status TEXT CHECK(status IN ('WAITING', 'CALLED', 'SERVED', 'SKIPPED', 'CANCELLED', 'INVALID')) DEFAULT 'WAITING',
     called_at REAL NULL,
     skipped_at REAL NULL,
     served_at REAL NULL,

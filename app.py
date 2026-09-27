@@ -33,9 +33,9 @@ strategy = StandardRegistrarStrategy()
 
 
 def generate_temp_password(length: int = 8) -> str:
-    """Generates a secure 8-character alphanumeric temporary password."""
-    alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+    """Generates explicit, readable temporary password in format Mapua#<6-random-digits>."""
+    digits = "".join(secrets.choice(string.digits) for _ in range(6))
+    return f"Mapua#{digits}"
 
 # File Upload Configuration
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "avatars")
@@ -1091,12 +1091,13 @@ def dashboard():
     top_waiting = queue.peek()
 
     served_tickets = []
+    archived_tickets = []
     all_tickets = []
 
     if filter_type == "served":
         cursor.execute("""
             SELECT id, student_id, full_name, request_type, arrival_timestamp, served_at, served_by, remarks, feedback_rating, feedback_comment, status
-            FROM tickets WHERE status IN ('SERVED', 'SKIPPED') ORDER BY served_at DESC
+            FROM tickets WHERE status = 'SERVED' ORDER BY served_at DESC
         """)
         rows = cursor.fetchall()
         for r in rows:
@@ -1114,6 +1115,25 @@ def dashboard():
                 "feedback_comment": r[9],
                 "status": r[10],
                 "wait_duration": wait_dur
+            })
+    elif filter_type == "archived":
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, priority_score, status, served_at, served_by, remarks
+            FROM tickets WHERE status IN ('CANCELLED', 'INVALID', 'SKIPPED') ORDER BY arrival_timestamp DESC
+        """)
+        rows = cursor.fetchall()
+        for r in rows:
+            archived_tickets.append({
+                "id": r[0],
+                "student_id": r[1],
+                "full_name": r[2],
+                "request_type": r[3],
+                "arrival_timestamp": r[4],
+                "priority_score": r[5],
+                "status": r[6],
+                "served_at": r[7],
+                "served_by": r[8] or "—",
+                "remarks": r[9] or "—"
             })
     elif filter_type == "all":
         cursor.execute("""
@@ -1146,6 +1166,7 @@ def dashboard():
         top_waiting=top_waiting,
         waiting_tickets=sorted_waiting,
         served_tickets=served_tickets,
+        archived_tickets=archived_tickets,
         all_tickets=all_tickets
     )
 
@@ -1364,6 +1385,54 @@ def rejoin_ticket(ticket_id: int):
     return redirect(url_for("ticket_status", ticket_id=ticket_id))
 
 
+@app.route("/tickets/<int:ticket_id>/void", methods=["POST"])
+@app.route("/ticket/<int:ticket_id>/void", methods=["POST"])
+@staff_required
+def void_ticket(ticket_id: int):
+    """Soft-deletes / voids an active ticket with mandatory void reason remarks."""
+    void_reason = request.form.get("void_reason", "").strip() or request.form.get("custom_reason", "").strip()
+    if not void_reason:
+        void_reason = "Voided by staff"
+
+    current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or session.get("user", {}).get("full_name") or "staff"
+    full_remarks = f"Voided: {void_reason} (by {current_user})"
+
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE tickets
+        SET status = 'CANCELLED', remarks = ?
+        WHERE id = ?
+    """, (full_remarks, ticket_id))
+    conn.commit()
+    conn.close()
+
+    # Immediately refresh in-memory Min-Heap queue
+    load_queue_from_db()
+
+    flash(f"Ticket #{ticket_id} has been marked as voided/cancelled.", "warning")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+@app.route("/tickets/<int:ticket_id>/delete", methods=["POST"])
+@app.route("/ticket/<int:ticket_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def delete_ticket(ticket_id: int):
+    """Permanently deletes a ticket from the SQLite database (Admin only)."""
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
+    conn.commit()
+    conn.close()
+
+    # Immediately refresh in-memory Min-Heap queue
+    load_queue_from_db()
+
+    flash(f"Ticket #{ticket_id} permanently deleted from database.", "danger")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
 @app.route("/analytics")
 @staff_required
 def analytics_dashboard():
@@ -1575,15 +1644,20 @@ def admin_reset_password(user_id: int = None):
         return redirect(url_for("admin_users"))
 
     u_id, email, full_name = user_row
-    temp_pass = generate_temp_password(8)
+    temp_pass = generate_temp_password()
     pass_hash = generate_password_hash(temp_pass)
 
     cursor.execute(f"UPDATE {table_name} SET password_hash = ?, must_change_password = 1 WHERE id = ?", (pass_hash, u_id))
     conn.commit()
     conn.close()
 
-    notifier.send_password_reset_notice(email, full_name, temp_pass)
-    flash(f"Temporary password generated and emailed to {email}.", "success")
+    email_sent = notifier.send_password_reset_notice(email, full_name, temp_pass)
+
+    if email_sent:
+        flash(f"Password for {full_name} reset to: <strong>{temp_pass}</strong> (Dispatched to {email}).", "success")
+    else:
+        flash(f"Password for {full_name} reset to: <strong>{temp_pass}</strong>, but email delivery failed. Please deliver it manually.", "warning")
+
     return redirect(url_for("admin_users"))
 
 

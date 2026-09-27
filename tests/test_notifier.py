@@ -95,13 +95,15 @@ class TestNotifierModule(unittest.TestCase):
         Config.SMTP_PASSWORD = "invalid_password"
         Config.SMTP_SERVER = "invalid.smtp.server.local"
 
-        result = notifier.send_password_reset_notice(
-            to_email="fallback@mymail.mapua.edu.ph",
-            full_name="Fallback Student",
-            temp_password="TempPass456"
-        )
-        self.assertTrue(result)
-        Config.EMAIL_DEV_MODE = True
+        try:
+            result = notifier.send_password_reset_notice(
+                to_email="fallback@mymail.mapua.edu.ph",
+                full_name="Fallback Student",
+                temp_password="TempPass456"
+            )
+            self.assertFalse(result)
+        finally:
+            Config.EMAIL_DEV_MODE = True
 
 
 if __name__ == "__main__":

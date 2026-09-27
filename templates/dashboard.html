@@ -93,6 +93,9 @@
                 <button type="button" class="btn btn-outline-danger btn-lg px-4 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#skipModal{{ called_ticket.id }}">
                     ⚠️ Skip (No-Show)
                 </button>
+                <button type="button" class="btn btn-outline-dark btn-lg px-3 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#voidCalledModal{{ called_ticket.id }}">
+                    🚫 Void
+                </button>
             </div>
         </div>
     </div>
@@ -143,6 +146,38 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-warning fw-bold">Confirm Skip (No-Show)</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Void Active Called Ticket Modal -->
+    <div class="modal fade" id="voidCalledModal{{ called_ticket.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold">Void Called Ticket #{{ called_ticket.id }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="/tickets/{{ called_ticket.id }}/void">
+                    <div class="modal-body">
+                        <p class="mb-2"><strong>Student:</strong> {{ called_ticket.full_name }} ({{ called_ticket.student_id }})</p>
+                        <p class="mb-3 text-muted">Voiding will cancel this ticket and remove it from active processing.</p>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Reason for Voiding</label>
+                            <select name="void_reason" class="form-select" required>
+                                <option value="Duplicate Request">Duplicate Request</option>
+                                <option value="Invalid Student Data">Invalid Student Data</option>
+                                <option value="Testing Entry">Testing Entry</option>
+                                <option value="Student Walkout / Left Queue">Student Walkout / Left Queue</option>
+                                <option value="Other / Accidental Entry">Other / Accidental Entry</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger fw-bold">Confirm Void Ticket</button>
                     </div>
                 </form>
             </div>
@@ -203,6 +238,12 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link {% if filter_type == 'archived' %}active text-mapua-cardinal border-mapua-cardinal{% else %}text-secondary{% endif %}"
+                   href="/dashboard?filter=archived">
+                   Archived &amp; Voided
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link {% if filter_type == 'all' %}active text-mapua-cardinal border-mapua-cardinal{% else %}text-secondary{% endif %}"
                    href="/dashboard?filter=all">
                    All Ticket Records
@@ -239,7 +280,7 @@
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="scope" id="scopeAll" value="all">
                             <label class="form-check-label fw-bold text-danger" for="scopeAll">
-                                Purge All Tickets & History
+                                Purge All Tickets &amp; History
                             </label>
                             <div class="text-muted small">Permanently deletes all ticket records and analytics history from the database.</div>
                         </div>
@@ -268,7 +309,7 @@
                         <th>Service Request</th>
                         <th style="width: 12%;">Wait Time</th>
                         <th style="width: 12%;">Priority Score</th>
-                        <th style="width: 12%;">Action</th>
+                        <th style="width: 15%;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -287,13 +328,49 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if called_ticket %}
-                                <button class="btn btn-sm btn-outline-secondary" disabled title="Complete current active ticket first">Locked</button>
-                            {% else %}
-                                <form method="POST" action="/tickets/{{ t.ticket_id }}/call" class="d-inline">
-                                    <button type="submit" class="btn btn-sm btn-warning fw-bold">Call Student</button>
-                                </form>
-                            {% endif %}
+                            <div class="d-flex gap-1 align-items-center">
+                                {% if called_ticket %}
+                                    <button class="btn btn-sm btn-outline-secondary" disabled title="Complete current active ticket first">Locked</button>
+                                {% else %}
+                                    <form method="POST" action="/tickets/{{ t.ticket_id }}/call" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-warning fw-bold">Call Student</button>
+                                    </form>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-outline-danger fw-bold" data-bs-toggle="modal" data-bs-target="#voidModal{{ t.ticket_id }}">
+                                    Void
+                                </button>
+                            </div>
+
+                            <!-- Void Modal for waiting ticket -->
+                            <div class="modal fade text-start" id="voidModal{{ t.ticket_id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-danger text-white">
+                                            <h5 class="modal-title fw-bold">Void Ticket #{{ t.ticket_id }}</h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <form method="POST" action="/tickets/{{ t.ticket_id }}/void">
+                                            <div class="modal-body">
+                                                <p class="mb-2 text-dark">Are you sure you want to void active ticket <strong>#{{ t.ticket_id }} — {{ t.name }}</strong>?</p>
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold text-dark">Select Void Reason</label>
+                                                    <select name="void_reason" class="form-select" required>
+                                                        <option value="Duplicate Request">Duplicate Request</option>
+                                                        <option value="Invalid Student Data">Invalid Student Data</option>
+                                                        <option value="Testing Entry">Testing Entry</option>
+                                                        <option value="Student Walkout / Left Queue">Student Walkout / Left Queue</option>
+                                                        <option value="Other / Accidental Entry">Other / Accidental Entry</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-danger btn-sm fw-bold">Confirm Void Ticket</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     {% else %}
@@ -319,7 +396,10 @@
                         <th style="width: 10%;">Wait Time</th>
                         <th style="width: 14%;">Served By Staff</th>
                         <th>Staff Remarks / Notes</th>
-                        <th style="width: 14%;">Student Rating</th>
+                        <th style="width: 12%;">Student Rating</th>
+                        {% if user and user.role == 'admin' %}
+                        <th style="width: 10%;">Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -351,10 +431,76 @@
                                 <span class="text-muted small">No feedback</span>
                             {% endif %}
                         </td>
+                        {% if user and user.role == 'admin' %}
+                        <td>
+                            <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
+                                    🗑️ Delete
+                                </button>
+                            </form>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-3">No served or skipped tickets recorded.</td>
+                        <td colspan="{% if user and user.role == 'admin' %}10{% else %}9{% endif %}" class="text-center text-muted py-3">No served tickets recorded.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    {% elif filter_type == 'archived' %}
+        <h4 class="fw-bold text-secondary mb-3">Archived &amp; Voided Tickets</h4>
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover bg-white shadow-sm align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 8%;">Ticket ID</th>
+                        <th style="width: 11%;">Student ID</th>
+                        <th>Student Name</th>
+                        <th>Service Request</th>
+                        <th style="width: 12%;">Status</th>
+                        <th style="width: 14%;">Processed By</th>
+                        <th>Reason / Remarks</th>
+                        {% if user and user.role == 'admin' %}
+                        <th style="width: 10%;">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in archived_tickets %}
+                    <tr>
+                        <td>#{{ t.id }}</td>
+                        <td>{{ t.student_id }}</td>
+                        <td class="fw-bold">{{ t.full_name }}</td>
+                        <td>{{ t.request_type }}</td>
+                        <td>
+                            {% if t.status == 'CANCELLED' %}
+                                <span class="badge bg-danger">CANCELLED / VOID</span>
+                            {% elif t.status == 'INVALID' %}
+                                <span class="badge bg-dark">INVALID</span>
+                            {% elif t.status == 'SKIPPED' %}
+                                <span class="badge bg-warning text-dark">SKIPPED</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ t.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge bg-dark">{{ t.served_by }}</span></td>
+                        <td class="small">{{ t.remarks }}</td>
+                        {% if user and user.role == 'admin' %}
+                        <td>
+                            <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
+                                <button type="submit" class="btn btn-sm btn-danger fw-bold">
+                                    🗑️ Delete
+                                </button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if user and user.role == 'admin' %}8{% else %}7{% endif %}" class="text-center text-muted py-3">No archived or voided tickets recorded.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -375,6 +521,9 @@
                         <th style="width: 10%;">Status</th>
                         <th style="width: 14%;">Served By</th>
                         <th>Staff Remarks / Notes</th>
+                        {% if user and user.role == 'admin' %}
+                        <th style="width: 10%;">Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -394,16 +543,27 @@
                                 <span class="badge bg-success">SERVED</span>
                             {% elif t.status == 'SKIPPED' %}
                                 <span class="badge bg-secondary">SKIPPED</span>
+                            {% elif t.status == 'CANCELLED' %}
+                                <span class="badge bg-danger">CANCELLED / VOID</span>
                             {% else %}
                                 <span class="badge bg-dark">{{ t.status }}</span>
                             {% endif %}
                         </td>
                         <td><span class="badge bg-dark">{{ t.served_by }}</span></td>
                         <td class="small">{{ t.remarks }}</td>
+                        {% if user and user.role == 'admin' %}
+                        <td>
+                            <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
+                                    🗑️ Delete
+                                </button>
+                            </form>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-3">No tickets recorded in system.</td>
+                        <td colspan="{% if user and user.role == 'admin' %}9{% else %}8{% endif %}" class="text-center text-muted py-3">No tickets recorded in system.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

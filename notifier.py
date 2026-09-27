@@ -1,16 +1,18 @@
 """
 MapuaQ Automated Email Notification Service
 Supports Dual-Mode Switch (Live SMTP vs. Development/Demo Mode) with Graceful Fallback.
-Dispatches asynchronous notifications for queue lifecycle events, security password resets, and account email verification.
+Dispatches notifications for queue lifecycle events, security password resets, and account email verification.
 """
 
 import os
 import smtplib
-import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import flash
+from dotenv import load_dotenv
 from config import Config
+
+# Ensure environment variables are parsed upon module load
+load_dotenv()
 
 
 def _log_mock_email(to_email: str, subject: str, body_text: str, header_label: str = "[MOCK EMAIL DISPATCH]"):
@@ -26,9 +28,9 @@ def _log_mock_email(to_email: str, subject: str, body_text: str, header_label: s
 
 def _send_email_async(to_email: str, subject: str, body_text: str, body_html: str = None) -> bool:
     """
-    Internal non-blocking email dispatch handler.
-    If EMAIL_DEV_MODE is True or SMTP_USERNAME is empty, logs formatted mock email to terminal.
-    If EMAIL_DEV_MODE is False, sends real SMTP email via background thread with fallback on error.
+    Internal email dispatch handler.
+    If EMAIL_DEV_MODE is True or SMTP_USERNAME is empty, logs formatted mock email to terminal and returns True.
+    If EMAIL_DEV_MODE is False, connects via SMTP, sends email, and returns True on success, False on error.
     """
     if not to_email:
         return False
@@ -40,43 +42,38 @@ def _send_email_async(to_email: str, subject: str, body_text: str, body_html: st
         if not dev_mode and not Config.SMTP_USERNAME:
             print("[SMTP WARNING] SMTP_USERNAME is blank. Falling back to Dev/Demo Mode.")
         _log_mock_email(to_email, subject, body_text, "[MOCK EMAIL DISPATCH]")
-        try:
-            flash(f"📧 [DEMO EMAIL SENT] Notification dispatched to {to_email}", "info")
-        except RuntimeError:
-            pass  # Outside active request context
         return True
 
-    # Live SMTP Mode — Asynchronous Background Thread Execution
-    def smtp_worker():
-        try:
-            msg = MIMEMultipart("alternative")
-            sender_name = Config.SMTP_SENDER_NAME or "Mapúa Registrar (MapuaQ)"
-            msg["From"] = f"{sender_name} <{Config.SMTP_USERNAME}>"
-            msg["To"] = to_email
-            msg["Subject"] = subject
-
-            msg.attach(MIMEText(body_text, "plain"))
-            if body_html:
-                msg.attach(MIMEText(body_html, "html"))
-
-            with smtplib.SMTP(Config.SMTP_SERVER, int(Config.SMTP_PORT), timeout=10) as server:
-                if Config.SMTP_USE_TLS:
-                    server.starttls()
-                if Config.SMTP_USERNAME and Config.SMTP_PASSWORD:
-                    server.login(Config.SMTP_USERNAME, Config.SMTP_PASSWORD)
-                server.send_message(msg)
-            print(f"[SMTP SUCCESS] Live email sent to {to_email}")
-        except Exception as e:
-            print(f"[SMTP ERROR] Delivery failed: {e}")
-            # Fallback gracefully to terminal log so application never crashes
-            _log_mock_email(to_email, subject, body_text, "[SMTP ERROR FALLBACK DISPATCH]")
-
-    threading.Thread(target=smtp_worker, daemon=True).start()
+    # Live SMTP Mode
     try:
-        flash(f"📧 Email notification dispatched to {to_email}", "success")
-    except RuntimeError:
-        pass
-    return True
+        msg = MIMEMultipart("alternative")
+        sender_name = Config.SMTP_SENDER_NAME or "Mapúa Registrar (MapuaQ)"
+        sender_from = Config.SMTP_FROM or Config.SMTP_USERNAME
+        msg["From"] = f"{sender_name} <{sender_from}>"
+        msg["To"] = to_email
+        msg["Subject"] = subject
+
+        msg.attach(MIMEText(body_text, "plain"))
+        if body_html:
+            msg.attach(MIMEText(body_html, "html"))
+
+        smtp_server = Config.SMTP_SERVER or "smtp.gmail.com"
+        smtp_port = int(Config.SMTP_PORT or 587)
+
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=12) as server:
+            if Config.SMTP_USE_TLS:
+                server.starttls()
+            if Config.SMTP_USERNAME and Config.SMTP_PASSWORD:
+                server.login(Config.SMTP_USERNAME, Config.SMTP_PASSWORD)
+            server.send_message(msg)
+
+        print(f"[SMTP SUCCESS] Live email delivered to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[SMTP ERROR] Delivery failed to {to_email}: {e}")
+        # Log mock email as terminal fallback
+        _log_mock_email(to_email, subject, body_text, f"[SMTP ERROR FALLBACK - {e}]")
+        return False
 
 
 def notify_ticket_created(ticket_data: dict, base_url: str = None) -> bool:
