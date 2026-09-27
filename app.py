@@ -130,6 +130,23 @@ def init_db():
         """, (staff_pass_hash, time.time()))
         conn.commit()
 
+    # Seed default Student accounts if missing
+    default_students = [
+        ("2024000101", "student1@mymail.mapua.edu.ph", "Juan Dela Cruz", "BS Computer Engineering"),
+        ("2024000102", "student2@mymail.mapua.edu.ph", "Maria Clara Santos", "BS Information Technology"),
+        ("2024000103", "student3@mymail.mapua.edu.ph", "Jose Rizal System", "BS Computer Science"),
+    ]
+
+    for std_id, std_email, std_name, std_prog in default_students:
+        cursor.execute("SELECT id FROM users WHERE email = ? OR student_id = ?", (std_email, std_id))
+        if not cursor.fetchone():
+            std_pass_hash = generate_password_hash("StudentPass2026!")
+            cursor.execute("""
+                INSERT INTO users (student_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+                VALUES (?, ?, ?, ?, 'student', ?, '/static/uploads/avatars/default.png', ?)
+            """, (std_id, std_email, std_pass_hash, std_name, std_prog, time.time()))
+            conn.commit()
+
     conn.close()
 
 

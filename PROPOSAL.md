@@ -411,6 +411,20 @@ CREATE TABLE IF NOT EXISTS tickets (
 
 ---
 
+### 7.7 System Access Control & Pre-Seeded Testing Credentials
+
+To support immediate verification and testing across all system roles, the database initialization routine (`init_db()`) automatically seeds default institutional accounts with pre-hashed PBKDF2 credentials:
+
+| Role | Name | Email / Identifier | Password | Student / Employee ID | Degree Program / Department |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Lead Admin** | Lead Registrar Admin | `admin@mapua.edu.ph` | `MapuaAdmin2026!` | `admin` | Registrar Administration |
+| **Registrar Staff** | Registrar Staff Officer | `registrar@mapua.edu.ph` | `StaffPass2026!` | `registrar` | Registrar Counter |
+| **Student 1** | Juan Dela Cruz | `student1@mymail.mapua.edu.ph` | `StudentPass2026!` | `2024000101` | BS Computer Engineering |
+| **Student 2** | Maria Clara Santos | `student2@mymail.mapua.edu.ph` | `StudentPass2026!` | `2024000102` | BS Information Technology |
+| **Student 3** | Jose Rizal System | `student3@mymail.mapua.edu.ph` | `StudentPass2026!` | `2024000103` | BS Computer Science |
+
+---
+
 ## 8. Implementation Plan and Timeline (4-Sprint Agile Lifecycle)
 
 The MapuaQ development lifecycle strictly adheres to Dr. John De Guzman Tarampi's official 4-sprint syllabus schedule spanning **Weeks 7 through 10**:
