@@ -21,10 +21,12 @@ from heap_queue import (
     StudentTicket
 )
 import analytics
+import notifier
+from config import Config
 
 app = Flask(__name__)
-app.secret_key = "mapuaq_registrar_secret_key_2026_super_secure"
-DB = "students_queue.db"
+app.secret_key = Config.SECRET_KEY
+DB = Config.DB_NAME
 strategy = StandardRegistrarStrategy()
 
 # File Upload Configuration
@@ -675,6 +677,26 @@ def checkin():
         conn.commit()
         conn.close()
 
+        # Calculate queue position & dispatch notification
+        queue = load_queue_from_db()
+        sorted_queue = queue.get_sorted_list()
+        students_ahead = 0
+        for idx, t in enumerate(sorted_queue):
+            if t.ticket_id == ticket_id:
+                students_ahead = idx
+                break
+        est_wait = students_ahead * 5
+
+        notifier.notify_ticket_created({
+            "id": ticket_id,
+            "student_id": student_id,
+            "full_name": full_name,
+            "email": email,
+            "request_type": req_type,
+            "grade_level": level,
+            "estimated_wait_mins": est_wait
+        })
+
         return redirect(url_for("ticket_status", ticket_id=ticket_id))
 
     return render_template("checkin.html", user=session.get("user"))
@@ -878,7 +900,19 @@ def call_ticket(ticket_id: int):
         WHERE id = ? AND status = 'WAITING'
     """, (time.time(), current_user, ticket_id))
     conn.commit()
+
+    cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
+    c_row = cursor.fetchone()
     conn.close()
+
+    if c_row:
+        notifier.notify_student_called({
+            "id": c_row[0],
+            "student_id": c_row[1],
+            "full_name": c_row[2],
+            "email": c_row[3],
+            "request_type": c_row[4]
+        }, counter_number="Counter 1")
 
     flash(f"Ticket #{ticket_id} has been CALLED to the service counter.", "info")
     return redirect(url_for("dashboard"))
@@ -913,6 +947,15 @@ def call_next():
         """, (time.time(), current_user, top_ticket.ticket_id))
         conn.commit()
         conn.close()
+
+        notifier.notify_student_called({
+            "id": top_ticket.ticket_id,
+            "student_id": top_ticket.student_id,
+            "full_name": top_ticket.name,
+            "email": top_ticket.student_id,  # Fallback email/id
+            "request_type": top_ticket.request_name
+        }, counter_number="Counter 1")
+
         flash(f"Ticket #{top_ticket.ticket_id} ({top_ticket.name}) is now CALLED to the counter.", "info")
     else:
         flash("No students currently waiting in queue.", "warning")
@@ -928,13 +971,28 @@ def mark_serve(ticket_id: int):
     remarks = request.form.get("remarks", "").strip()
     current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
     conn = sqlite3.connect(DB)
-    conn.execute("""
+    cursor = conn.cursor()
+    cursor.execute("""
         UPDATE tickets
         SET status = 'SERVED', served_at = ?, served_by = ?, remarks = ?
         WHERE id = ?
     """, (time.time(), current_user, remarks if remarks else None, ticket_id))
     conn.commit()
+
+    cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
+    v_row = cursor.fetchone()
     conn.close()
+
+    if v_row:
+        notifier.notify_ticket_served({
+            "id": v_row[0],
+            "student_id": v_row[1],
+            "full_name": v_row[2],
+            "email": v_row[3],
+            "request_type": v_row[4],
+            "remarks": remarks if remarks else "Processed successfully"
+        })
+
     flash(f"Ticket #{ticket_id} successfully marked as SERVED.", "success")
     return redirect(url_for("dashboard"))
 
@@ -950,13 +1008,27 @@ def mark_skip(ticket_id: int):
 
     current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
     conn = sqlite3.connect(DB)
-    conn.execute("""
+    cursor = conn.cursor()
+    cursor.execute("""
         UPDATE tickets
         SET status = 'SKIPPED', skipped_at = ?, served_at = ?, served_by = ?, remarks = ?
         WHERE id = ?
     """, (time.time(), time.time(), current_user, skip_reason, ticket_id))
     conn.commit()
+
+    cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
+    k_row = cursor.fetchone()
     conn.close()
+
+    if k_row:
+        notifier.notify_student_skipped({
+            "id": k_row[0],
+            "student_id": k_row[1],
+            "full_name": k_row[2],
+            "email": k_row[3],
+            "request_type": k_row[4]
+        })
+
     flash(f"Ticket #{ticket_id} marked as SKIPPED (No-Show). 15-minute re-join window initiated.", "warning")
     return redirect(url_for("dashboard"))
 
