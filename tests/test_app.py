@@ -19,6 +19,8 @@ class TestMapuaQRoutes(unittest.TestCase):
         # Clean & re-initialize test database
         conn = sqlite3.connect(DB)
         conn.execute("DROP TABLE IF EXISTS tickets")
+        conn.execute("DROP TABLE IF EXISTS staff_users")
+        conn.execute("DROP TABLE IF EXISTS students")
         conn.execute("DROP TABLE IF EXISTS users")
         conn.commit()
         conn.close()
@@ -283,7 +285,7 @@ class TestMapuaQRoutes(unittest.TestCase):
 
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
-        cursor.execute("SELECT email, full_name, role FROM users WHERE email = 'jsmith@mapua.edu.ph'")
+        cursor.execute("SELECT email, full_name, role FROM staff_users WHERE email = 'jsmith@mapua.edu.ph'")
         row = cursor.fetchone()
         conn.close()
 
@@ -291,6 +293,78 @@ class TestMapuaQRoutes(unittest.TestCase):
         self.assertEqual(row[0], "jsmith@mapua.edu.ph")
         self.assertEqual(row[1], "John Smith")
         self.assertEqual(row[2], "staff")
+
+    def test_admin_delete_student_account_with_confirmation(self):
+        """Verifies POST /admin/users/delete permanently removes student account when typing DELETE."""
+        # Arrange: Provision student account
+        self._login_as_admin()
+        self.client.post("/admin/users", data={
+            "student_id": "2024777001",
+            "email": "delstudent@mymail.mapua.edu.ph",
+            "full_name": "Delete Me",
+            "password": "StudentPass2026!",
+            "role": "student"
+        })
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM students WHERE email = 'delstudent@mymail.mapua.edu.ph'")
+        std_id = cursor.fetchone()[0]
+        conn.close()
+
+        # Act: Submit delete form with confirm_text = 'DELETE'
+        res = self.client.post("/admin/users/delete", data={
+            "target_type": "student",
+            "user_id": std_id,
+            "confirm_text": "DELETE"
+        }, follow_redirects=True)
+
+        # Assert: Student account removed from database
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"permanently deleted", res.data)
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM students WHERE id = ?", (std_id,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 0)
+
+    def test_admin_delete_user_canceled_without_delete_confirmation(self):
+        """Verifies account deletion is canceled if user fails to type DELETE in confirmation box."""
+        # Arrange: Provision student account
+        self._login_as_admin()
+        self.client.post("/admin/users", data={
+            "student_id": "2024777002",
+            "email": "keepstudent@mymail.mapua.edu.ph",
+            "full_name": "Keep Me",
+            "password": "StudentPass2026!",
+            "role": "student"
+        })
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM students WHERE email = 'keepstudent@mymail.mapua.edu.ph'")
+        std_id = cursor.fetchone()[0]
+        conn.close()
+
+        # Act: Submit delete form with incorrect confirm_text
+        res = self.client.post("/admin/users/delete", data={
+            "target_type": "student",
+            "user_id": std_id,
+            "confirm_text": "cancel"
+        }, follow_redirects=True)
+
+        # Assert: Warning flashed and student account remains in database
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Deletion canceled", res.data)
+
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM students WHERE id = ?", (std_id,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 1)
 
     def test_admin_reset_queue_route(self):
         """Verifies admin POST /admin/reset-queue purges tickets from database."""

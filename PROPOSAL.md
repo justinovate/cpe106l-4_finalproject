@@ -332,22 +332,35 @@ sequenceDiagram
 
 ```mermaid
 erDiagram
-    USERS ||--o{ TICKETS : "submits / owns"
-    USERS {
+    STUDENTS ||--o{ TICKETS : "submits / owns"
+    STAFF_USERS ||--o{ TICKETS : "services / calls"
+
+    STAFF_USERS {
         int id PK "AUTOINCREMENT Primary Key"
-        string student_id "Unique Student/Employee Number"
+        string employee_id "Unique Employee ID"
+        string email "Unique Staff Email (@mapua.edu.ph)"
+        string password_hash "PBKDF2 Password Hash"
+        string full_name "Staff Full Name"
+        string role "User Role ('staff', 'admin')"
+        string program_dept "Department / Counter"
+        string avatar_url "Relative Path to Avatar File"
+        float created_at "Registration Unix Timestamp"
+    }
+
+    STUDENTS {
+        int id PK "AUTOINCREMENT Primary Key"
+        string student_id "Unique Student Number"
         string email "Unique Mapúa Email (@mymail.mapua.edu.ph)"
         string password_hash "PBKDF2 Password Hash"
-        string full_name "User Full Name"
-        string role "User Role ('student', 'staff', 'admin')"
-        string program_dept "Degree Program / Department"
+        string full_name "Student Full Name"
+        string program_dept "Degree Program"
         string avatar_url "Relative Path to Avatar File"
         float created_at "Registration Unix Timestamp"
     }
 
     TICKETS {
         int id PK "AUTOINCREMENT Primary Key"
-        int user_id FK "References USERS.id"
+        int user_id FK "References STUDENTS.id"
         string student_id "Student Number"
         string full_name "Student Full Name"
         string email "Student Email"
@@ -360,7 +373,7 @@ erDiagram
         string status "Status ('WAITING', 'CALLED', 'SERVED', 'SKIPPED', 'CANCELLED')"
         float called_at "Timestamp when Ticket Called"
         float served_at "Timestamp when Ticket Served"
-        string served_by FK "References USERS.email"
+        string served_by FK "References STAFF_USERS.email"
         string remarks "Staff Remarks"
         int feedback_rating "Student Rating (1 to 5 Stars)"
         string feedback_comment "Student Rating Comments"
@@ -371,14 +384,26 @@ erDiagram
 #### Database DDL (`schema.sql`)
 ```sql
 -- MapuaQ: Mapúa University Registrar Priority Queue Schema
+-- Separate tables for Registrar Staff/Admin Accounts and Student Accounts
 
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS staff_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id TEXT UNIQUE NULL,
+    employee_id TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     full_name TEXT NOT NULL,
-    role TEXT CHECK(role IN ('student', 'staff', 'admin')) NOT NULL DEFAULT 'student',
+    role TEXT CHECK(role IN ('staff', 'admin')) NOT NULL DEFAULT 'staff',
+    program_dept TEXT NULL,
+    avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
     program_dept TEXT NULL,
     avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
     created_at REAL NOT NULL
@@ -404,8 +429,8 @@ CREATE TABLE IF NOT EXISTS tickets (
     feedback_rating INTEGER NULL CHECK(feedback_rating BETWEEN 1 AND 5),
     feedback_comment TEXT NULL,
     feedback_submitted_at REAL NULL,
-    FOREIGN KEY (user_id) REFERENCES users (id),
-    FOREIGN KEY (served_by) REFERENCES users (email)
+    FOREIGN KEY (user_id) REFERENCES students (id),
+    FOREIGN KEY (served_by) REFERENCES staff_users (email)
 );
 ```
 
@@ -413,15 +438,13 @@ CREATE TABLE IF NOT EXISTS tickets (
 
 ### 7.7 System Access Control & Pre-Seeded Testing Credentials
 
-To support immediate verification and testing across all system roles, the database initialization routine (`init_db()`) automatically seeds default institutional accounts with pre-hashed PBKDF2 credentials:
+To support immediate verification and testing across administrative system roles, the database initialization routine (`init_db()`) automatically seeds default employee accounts with pre-hashed PBKDF2 credentials. Student accounts are cleanly separated in the `students` table and provisioned by Registrar Administration:
 
 | Role | Name | Email / Identifier | Password | Student / Employee ID | Degree Program / Department |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Lead Admin** | Lead Registrar Admin | `admin@mapua.edu.ph` | `MapuaAdmin2026!` | `admin` | Registrar Administration |
 | **Registrar Staff** | Registrar Staff Officer | `registrar@mapua.edu.ph` | `StaffPass2026!` | `registrar` | Registrar Counter |
-| **Student 1** | Juan Dela Cruz | `student1@mymail.mapua.edu.ph` | `StudentPass2026!` | `2024000101` | BS Computer Engineering |
-| **Student 2** | Maria Clara Santos | `student2@mymail.mapua.edu.ph` | `StudentPass2026!` | `2024000102` | BS Information Technology |
-| **Student 3** | Jose Rizal System | `student3@mymail.mapua.edu.ph` | `StudentPass2026!` | `2024000103` | BS Computer Science |
+| **Students** | *(Provisioned by Admin)* | *(MyMail Institutional)* | *(Secure Hash)* | *(Student ID)* | *(Degree Program)* |
 
 ---
 

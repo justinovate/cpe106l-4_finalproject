@@ -66,7 +66,7 @@ def allowed_file(filename: str) -> bool:
 
 
 def init_db():
-    """Initializes SQLite tables, performs migrations, and seeds default Admin & Staff accounts."""
+    """Initializes separate staff_users and students tables, performs migrations, and seeds default Admin & Staff accounts."""
     conn = sqlite3.connect(DB)
     with open("schema.sql", "r") as f:
         conn.executescript(f.read())
@@ -74,78 +74,40 @@ def init_db():
 
     cursor = conn.cursor()
 
-    # Schema migration checks for tickets table
-    cursor.execute("PRAGMA table_info(tickets)")
-    t_cols = [row[1] for row in cursor.fetchall()]
-    if "user_id" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN user_id INTEGER NULL")
-    if "email" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN email TEXT NOT NULL DEFAULT ''")
-    if "called_at" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN called_at REAL NULL")
-    if "served_at" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN served_at REAL NULL")
-    if "served_by" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN served_by TEXT NULL")
-    if "remarks" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN remarks TEXT NULL")
-    if "feedback_rating" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN feedback_rating INTEGER NULL")
-    if "feedback_comment" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN feedback_comment TEXT NULL")
-    if "feedback_submitted_at" not in t_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN feedback_submitted_at REAL NULL")
+    # Migration check: if legacy 'users' table exists, migrate staff/admin records to staff_users and drop 'users'
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+    if cursor.fetchone():
+        cursor.execute("""
+            INSERT OR IGNORE INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+            SELECT COALESCE(student_id, 'EMP-' || id), email, password_hash, full_name, role, program_dept, avatar_url, created_at
+            FROM users WHERE role IN ('staff', 'admin')
+        """)
+        cursor.execute("DROP TABLE users")
+        conn.commit()
 
-    # Schema migration checks for users table
-    cursor.execute("PRAGMA table_info(users)")
-    u_cols = [row[1] for row in cursor.fetchall()]
-    if "student_id" not in u_cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN student_id TEXT UNIQUE NULL")
-    if "email" not in u_cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT UNIQUE NOT NULL DEFAULT ''")
-    if "program_dept" not in u_cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN program_dept TEXT NULL")
-    if "avatar_url" not in u_cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png'")
-
-    conn.commit()
-
-    # Seed default Admin account if missing
-    cursor.execute("SELECT id FROM users WHERE email = 'admin@mapua.edu.ph' OR student_id = 'admin'")
+    # Seed default Admin account into staff_users if missing
+    cursor.execute("SELECT id FROM staff_users WHERE email = 'admin@mapua.edu.ph' OR employee_id = 'admin'")
     if not cursor.fetchone():
         admin_pass_hash = generate_password_hash("MapuaAdmin2026!")
         cursor.execute("""
-            INSERT INTO users (student_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
             VALUES ('admin', 'admin@mapua.edu.ph', ?, 'Lead Registrar Admin', 'admin', 'Registrar Administration', '/static/uploads/avatars/default.png', ?)
         """, (admin_pass_hash, time.time()))
         conn.commit()
 
-    # Seed default Staff account if missing
-    cursor.execute("SELECT id FROM users WHERE email = 'registrar@mapua.edu.ph' OR student_id = 'registrar'")
+    # Seed default Staff account into staff_users if missing
+    cursor.execute("SELECT id FROM staff_users WHERE email = 'registrar@mapua.edu.ph' OR employee_id = 'registrar'")
     if not cursor.fetchone():
         staff_pass_hash = generate_password_hash("StaffPass2026!")
         cursor.execute("""
-            INSERT INTO users (student_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
             VALUES ('registrar', 'registrar@mapua.edu.ph', ?, 'Registrar Staff Officer', 'staff', 'Registrar Counter', '/static/uploads/avatars/default.png', ?)
         """, (staff_pass_hash, time.time()))
         conn.commit()
 
-    # Seed default Student accounts if missing
-    default_students = [
-        ("2024000101", "student1@mymail.mapua.edu.ph", "Juan Dela Cruz", "BS Computer Engineering"),
-        ("2024000102", "student2@mymail.mapua.edu.ph", "Maria Clara Santos", "BS Information Technology"),
-        ("2024000103", "student3@mymail.mapua.edu.ph", "Jose Rizal System", "BS Computer Science"),
-    ]
-
-    for std_id, std_email, std_name, std_prog in default_students:
-        cursor.execute("SELECT id FROM users WHERE email = ? OR student_id = ?", (std_email, std_id))
-        if not cursor.fetchone():
-            std_pass_hash = generate_password_hash("StudentPass2026!")
-            cursor.execute("""
-                INSERT INTO users (student_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
-                VALUES (?, ?, ?, ?, 'student', ?, '/static/uploads/avatars/default.png', ?)
-            """, (std_id, std_email, std_pass_hash, std_name, std_prog, time.time()))
-            conn.commit()
+    # Purge all student accounts as requested ("remove the students account. all of them. I will add my own")
+    cursor.execute("DELETE FROM students")
+    conn.commit()
 
     conn.close()
 
@@ -225,38 +187,64 @@ def index():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """Unified Authentication View accepting Mapúa Email, Employee ID, or Student ID."""
+    """Unified Authentication View accepting Mapúa Email, Employee ID, or Student ID across separate tables."""
     if request.method == "POST":
         identifier = request.form.get("identifier", "").strip()
         password = request.form.get("password", "")
 
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
+
+        # Step 1: Check staff_users table for Staff / Admin accounts
         cursor.execute("""
-            SELECT id, student_id, email, password_hash, full_name, role, program_dept, avatar_url
-            FROM users
-            WHERE email = ? OR student_id = ?
+            SELECT id, employee_id, email, password_hash, full_name, role, program_dept, avatar_url
+            FROM staff_users
+            WHERE lower(email) = lower(?) OR lower(employee_id) = lower(?)
         """, (identifier, identifier))
-        row = cursor.fetchone()
+        s_row = cursor.fetchone()
+
+        if s_row and check_password_hash(s_row[3], password):
+            session["user"] = {
+                "id": s_row[0],
+                "student_id": s_row[1],
+                "employee_id": s_row[1],
+                "email": s_row[2],
+                "full_name": s_row[4],
+                "role": s_row[5],
+                "program_dept": s_row[6],
+                "avatar_url": s_row[7] or "/static/uploads/avatars/default.png",
+                "username": s_row[1] or s_row[2],
+                "account_type": "staff_user"
+            }
+            conn.close()
+            flash(f"Welcome back, {s_row[4]}!", "success")
+            return redirect(url_for("dashboard"))
+
+        # Step 2: Check students table for Student accounts
+        cursor.execute("""
+            SELECT id, student_id, email, password_hash, full_name, program_dept, avatar_url
+            FROM students
+            WHERE lower(email) = lower(?) OR lower(student_id) = lower(?)
+        """, (identifier, identifier))
+        std_row = cursor.fetchone()
         conn.close()
 
-        if row and check_password_hash(row[3], password):
+        if std_row and check_password_hash(std_row[3], password):
             session["user"] = {
-                "id": row[0],
-                "student_id": row[1],
-                "email": row[2],
-                "full_name": row[4],
-                "role": row[5],
-                "program_dept": row[6],
-                "avatar_url": row[7] or "/static/uploads/avatars/default.png",
-                "username": row[1] or row[2]
+                "id": std_row[0],
+                "student_id": std_row[1],
+                "email": std_row[2],
+                "full_name": std_row[3],
+                "role": "student",
+                "program_dept": std_row[4],
+                "avatar_url": std_row[5] or "/static/uploads/avatars/default.png",
+                "username": std_row[1] or std_row[2],
+                "account_type": "student"
             }
-            flash(f"Welcome back, {row[4]}!", "success")
-            if row[5] in ("staff", "admin"):
-                return redirect(url_for("dashboard"))
+            flash(f"Welcome back, {std_row[3]}!", "success")
             return redirect(url_for("checkin"))
-        else:
-            flash("Invalid credentials. Please verify your Email / Account ID and password.", "danger")
+
+        flash("Invalid credentials. Please verify your Email / Account ID and password.", "danger")
 
     return render_template("login.html", user=session.get("user"))
 
@@ -281,6 +269,8 @@ def logout():
 def profile():
     """User profile view, avatar update, password change, and personal ticket history."""
     user_id = session["user"]["id"]
+    user_role = session["user"].get("role", "student")
+    target_table = "students" if user_role == "student" else "staff_users"
 
     if request.method == "POST":
         action = request.form.get("action")
@@ -298,7 +288,7 @@ def profile():
                     file.save(os.path.join(UPLOAD_FOLDER, unique_filename))
                     new_avatar_url = f"/static/uploads/avatars/{unique_filename}"
 
-                    cursor.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (new_avatar_url, user_id))
+                    cursor.execute(f"UPDATE {target_table} SET avatar_url = ? WHERE id = ?", (new_avatar_url, user_id))
                     conn.commit()
                     session["user"]["avatar_url"] = new_avatar_url
                     flash("Profile picture updated successfully!", "success")
@@ -310,7 +300,7 @@ def profile():
             new_pass = request.form.get("new_password", "")
             confirm_pass = request.form.get("confirm_password", "")
 
-            cursor.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+            cursor.execute(f"SELECT password_hash FROM {target_table} WHERE id = ?", (user_id,))
             row = cursor.fetchone()
 
             if not row or not check_password_hash(row[0], current_pass):
@@ -321,7 +311,7 @@ def profile():
                 flash("New password must be at least 6 characters long.", "danger")
             else:
                 new_pass_hash = generate_password_hash(new_pass)
-                cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_pass_hash, user_id))
+                cursor.execute(f"UPDATE {target_table} SET password_hash = ? WHERE id = ?", (new_pass_hash, user_id))
                 conn.commit()
                 flash("Password updated successfully!", "success")
 
@@ -331,32 +321,38 @@ def profile():
     # Fetch User Info & Role-Specific Profile Data
     conn = sqlite3.connect(DB)
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_id, email, full_name, role, program_dept, avatar_url, created_at
-        FROM users WHERE id = ?
-    """, (user_id,))
-    u_row = cursor.fetchone()
-
-    user_info = {
-        "id": u_row[0],
-        "student_id": u_row[1],
-        "email": u_row[2],
-        "full_name": u_row[3],
-        "role": u_row[4],
-        "program_dept": u_row[5],
-        "avatar_url": u_row[6] or "/static/uploads/avatars/default.png",
-        "created_at": u_row[7]
-    }
 
     my_tickets = []
     staff_stats = None
 
-    if user_info["role"] == "student":
-        # Student Profile: Fetch student's queued tickets and ratings
+    if user_role == "student":
+        cursor.execute("""
+            SELECT id, student_id, email, full_name, program_dept, avatar_url, created_at
+            FROM students WHERE id = ?
+        """, (user_id,))
+        u_row = cursor.fetchone()
+
+        if not u_row:
+            conn.close()
+            session.pop("user", None)
+            flash("Account not found. Please log in again.", "danger")
+            return redirect(url_for("login"))
+
+        user_info = {
+            "id": u_row[0],
+            "student_id": u_row[1],
+            "email": u_row[2],
+            "full_name": u_row[3],
+            "role": "student",
+            "program_dept": u_row[4],
+            "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
+            "created_at": u_row[6]
+        }
+
         cursor.execute("""
             SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment
             FROM tickets
-            WHERE user_id = ? OR email = ? OR (student_id IS NOT NULL AND student_id = ?)
+            WHERE user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?)
             ORDER BY arrival_timestamp DESC
         """, (user_id, user_info["email"], user_info["student_id"]))
         t_rows = cursor.fetchall()
@@ -375,7 +371,30 @@ def profile():
                 "feedback_comment": r[9]
             })
     else:
-        # Staff / Admin Profile: Fetch staff servicing statistics and audit records
+        cursor.execute("""
+            SELECT id, employee_id, email, full_name, role, program_dept, avatar_url, created_at
+            FROM staff_users WHERE id = ?
+        """, (user_id,))
+        u_row = cursor.fetchone()
+
+        if not u_row:
+            conn.close()
+            session.pop("user", None)
+            flash("Account not found. Please log in again.", "danger")
+            return redirect(url_for("login"))
+
+        user_info = {
+            "id": u_row[0],
+            "student_id": u_row[1],
+            "employee_id": u_row[1],
+            "email": u_row[2],
+            "full_name": u_row[3],
+            "role": u_row[4],
+            "program_dept": u_row[5],
+            "avatar_url": u_row[6] or "/static/uploads/avatars/default.png",
+            "created_at": u_row[7]
+        }
+
         staff_identifier = user_info["email"]
         cursor.execute("SELECT COUNT(*) FROM tickets WHERE served_by = ? AND status = 'SERVED'", (staff_identifier,))
         total_served = cursor.fetchone()[0]
@@ -756,42 +775,114 @@ def chart_distribution():
 @app.route("/admin/users", methods=["GET", "POST"])
 @admin_required
 def admin_users():
-    """Admin-only view for user management and staff provisioning."""
+    """Admin-only view for managing separated staff and student user tables."""
     if request.method == "POST":
         student_id = request.form.get("student_id", "").strip()
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         full_name = request.form.get("full_name", "").strip()
-        role = request.form.get("role", "staff")
-        program_dept = request.form.get("program_dept", "Registrar Staff").strip()
+        role = request.form.get("role", "student")
+        program_dept = request.form.get("program_dept", "Registrar").strip()
 
         if not email or not password or not full_name:
             flash("Please fill in all required fields.", "danger")
         else:
             conn = sqlite3.connect(DB)
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM users WHERE email = ? OR (student_id IS NOT NULL AND student_id = ? AND student_id != '')", (email, student_id))
-            if cursor.fetchone():
-                flash(f"User with Email '{email}' or Student ID '{student_id}' already exists.", "danger")
-                conn.close()
+
+            if role == "student":
+                cursor.execute("SELECT id FROM students WHERE lower(email) = lower(?) OR (student_id != '' AND lower(student_id) = lower(?))", (email, student_id))
+                d1 = cursor.fetchone()
+                cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
+                d2 = cursor.fetchone()
+
+                if d1 or d2:
+                    flash(f"Student or Account with Email '{email}' or ID '{student_id}' already exists.", "danger")
+                    conn.close()
+                else:
+                    pass_hash = generate_password_hash(password)
+                    cursor.execute("""
+                        INSERT INTO students (student_id, email, password_hash, full_name, program_dept, avatar_url, created_at)
+                        VALUES (?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', ?)
+                    """, (student_id, email, pass_hash, full_name, program_dept, time.time()))
+                    conn.commit()
+                    conn.close()
+                    flash(f"Student account '{full_name}' ({email}) successfully created.", "success")
+                    return redirect(url_for("admin_users"))
             else:
-                pass_hash = generate_password_hash(password)
-                cursor.execute("""
-                    INSERT INTO users (student_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', ?)
-                """, (student_id if student_id else None, email, pass_hash, full_name, role, program_dept, time.time()))
-                conn.commit()
-                conn.close()
-                flash(f"User '{full_name}' ({email}) successfully created as {role.upper()}.", "success")
-                return redirect(url_for("admin_users"))
+                cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
+                d1 = cursor.fetchone()
+                cursor.execute("SELECT id FROM students WHERE lower(email) = lower(?) OR (student_id != '' AND lower(student_id) = lower(?))", (email, student_id))
+                d2 = cursor.fetchone()
+
+                if d1 or d2:
+                    flash(f"Staff account with Email '{email}' or Employee ID '{student_id}' already exists.", "danger")
+                    conn.close()
+                else:
+                    pass_hash = generate_password_hash(password)
+                    cursor.execute("""
+                        INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', ?)
+                    """, (student_id, email, pass_hash, full_name, role, program_dept, time.time()))
+                    conn.commit()
+                    conn.close()
+                    flash(f"Staff/Admin account '{full_name}' ({email}) successfully created as {role.upper()}.", "success")
+                    return redirect(url_for("admin_users"))
 
     conn = sqlite3.connect(DB)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, student_id, email, full_name, role, program_dept, created_at FROM users ORDER BY created_at DESC")
-    users_list = cursor.fetchall()
+    cursor.execute("SELECT id, employee_id, email, full_name, role, program_dept, created_at FROM staff_users ORDER BY created_at DESC")
+    staff_list = cursor.fetchall()
+    cursor.execute("SELECT id, student_id, email, full_name, program_dept, created_at FROM students ORDER BY created_at DESC")
+    student_list = cursor.fetchall()
     conn.close()
 
-    return render_template("admin_users.html", users=users_list, user=session.get("user"))
+    return render_template("admin_users.html", staff_users=staff_list, students=student_list, user=session.get("user"))
+
+
+@app.route("/admin/users/delete", methods=["POST"])
+@admin_required
+def admin_delete_user():
+    """Admin-only route to safely delete student or staff accounts after typing 'DELETE' confirmation."""
+    target_type = request.form.get("target_type", "").strip()
+    user_id = request.form.get("user_id", type=int)
+    confirm_text = request.form.get("confirm_text", "").strip()
+
+    if confirm_text.upper() != "DELETE":
+        flash("Deletion canceled. You must type 'DELETE' in the confirmation box to remove an account.", "danger")
+        return redirect(url_for("admin_users"))
+
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+
+    if target_type == "staff_user":
+        if user_id == session.get("user", {}).get("id"):
+            flash("Operation denied: You cannot delete your own active administrator account.", "danger")
+            conn.close()
+            return redirect(url_for("admin_users"))
+
+        cursor.execute("DELETE FROM staff_users WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        flash(f"Staff/Admin account #{user_id} has been permanently deleted.", "warning")
+
+    elif target_type == "student":
+        cursor.execute("DELETE FROM students WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        flash(f"Student account #{user_id} has been permanently deleted.", "warning")
+
+    elif target_type == "all_students":
+        cursor.execute("DELETE FROM students")
+        conn.commit()
+        conn.close()
+        flash("All student accounts have been permanently purged from the database.", "danger")
+
+    else:
+        conn.close()
+        flash("Invalid target account type.", "danger")
+
+    return redirect(url_for("admin_users"))
 
 
 @app.route("/admin/reset-queue", methods=["POST"])
