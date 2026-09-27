@@ -8,6 +8,7 @@ import sqlite3
 import unittest
 import time
 from app import app, init_db, DB
+import analytics
 
 
 class TestMapuaQRoutes(unittest.TestCase):
@@ -515,6 +516,124 @@ class TestMapuaQRoutes(unittest.TestCase):
         conn.close()
         self.assertEqual(status, "CANCELLED")
 
+    def test_feedback_workflow_get_and_post(self):
+        """Verifies GET/POST feedback workflow for SERVED tickets including double-submission prevention."""
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at, served_by)
+            VALUES ('2024999003', 'Served Feedback Student', 'servedfeedback@mymail.mapua.edu.ph', 'Transcript of Records (TOR)', 4, 'Junior', 5, ?, 4.5, 'SERVED', ?, 'registrar@mapua.edu.ph')
+        """, (time.time() - 300, time.time() - 60))
+        t_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Step 1: GET feedback page for SERVED ticket
+        res = self.client.get(f"/ticket/{t_id}/feedback")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Registrar Service Feedback", res.data)
+
+        # Step 2: POST valid feedback (5 stars)
+        post_res = self.client.post(f"/ticket/{t_id}/feedback", data={
+            "rating": "5",
+            "comment": "Excellent service at the registrar counter!"
+        }, follow_redirects=True)
+
+        self.assertEqual(post_res.status_code, 200)
+        self.assertIn(b"Thank you for your feedback!", post_res.data)
+
+        # Verify DB state
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT feedback_rating, feedback_comment, feedback_submitted_at FROM tickets WHERE id = ?", (t_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        self.assertEqual(row[0], 5)
+        self.assertEqual(row[1], "Excellent service at the registrar counter!")
+        self.assertIsNotNone(row[2])
+
+        # Step 3: Subsequent GET shows read-only thank-you state
+        get_ro = self.client.get(f"/ticket/{t_id}/feedback")
+        self.assertEqual(get_ro.status_code, 200)
+        self.assertIn(b"Thank You for Your Feedback!", get_ro.data)
+
+        # Step 4: Double submission attempt is blocked
+        post_double = self.client.post(f"/ticket/{t_id}/feedback", data={
+            "rating": "1",
+            "comment": "Trying to overwrite feedback"
+        }, follow_redirects=True)
+        self.assertIn(b"Feedback has already been submitted for this ticket.", post_double.data)
+
+    def test_feedback_guard_non_served_ticket(self):
+        """Verifies feedback route redirects WAITING tickets with a guard warning alert."""
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2024999004', 'Waiting Student', 'waiting@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
+        """, (time.time(),))
+        t_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        res = self.client.get(f"/ticket/{t_id}/feedback", follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Feedback can only be submitted for completed/served tickets.", res.data)
+
+    def test_feedback_validation_invalid_rating(self):
+        """Verifies feedback POST rejects star ratings outside 1-5 range."""
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at)
+            VALUES ('2024999005', 'Invalid Rating Student', 'invalidrating@mymail.mapua.edu.ph', 'Form 137A (F137A)', 6, 'Sophomore', 7, ?, 6.5, 'SERVED', ?)
+        """, (time.time() - 300, time.time() - 100))
+        t_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        res = self.client.post(f"/ticket/{t_id}/feedback", data={
+            "rating": "10",
+            "comment": "Invalid high rating"
+        }, follow_redirects=True)
+
+        self.assertIn(b"Please select a valid star rating between 1 and 5 stars.", res.data)
+
+    def test_analytics_feedback_metrics_and_chart(self):
+        """Verifies analytics metrics calculations and Matplotlib feedback chart PNG route."""
+        conn = sqlite3.connect(DB)
+        cursor = conn.cursor()
+        now = time.time()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at, feedback_rating, feedback_comment, feedback_submitted_at)
+            VALUES ('2024999006', 'S1', 's1@mymail.mapua.edu.ph', 'Overload', 2, 'Senior', 3, ?, 2.5, 'SERVED', ?, 5, 'Great', ?)
+        """, (now - 600, now - 300, now - 200))
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at, feedback_rating, feedback_comment, feedback_submitted_at)
+            VALUES ('2024999007', 'S2', 's2@mymail.mapua.edu.ph', 'LOA', 3, 'Junior', 5, ?, 3.5, 'SERVED', ?, 4, 'Good', ?)
+        """, (now - 500, now - 200, now - 100))
+        conn.commit()
+        conn.close()
+
+        # Check analytics summary math
+        summary = analytics.get_analytics_summary(DB)
+        self.assertGreaterEqual(summary["total_feedback_count"], 2)
+        self.assertGreaterEqual(summary["average_satisfaction"], 4.0)
+
+        # Authenticate as Staff and call /api/analytics/feedback.png
+        self.client.get("/logout")
+        self.client.post("/login", data={
+            "identifier": "registrar@mapua.edu.ph",
+            "password": "StaffPass2026!"
+        })
+
+        chart_res = self.client.get("/api/analytics/feedback.png")
+        self.assertEqual(chart_res.status_code, 200)
+        self.assertEqual(chart_res.mimetype, "image/png")
+        self.assertGreater(len(chart_res.data), 100)
+
 
 if __name__ == "__main__":
     unittest.main()
+

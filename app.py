@@ -759,25 +759,76 @@ def ticket_status(ticket_id: int):
     )
 
 
-@app.route("/ticket/<int:ticket_id>/feedback", methods=["POST"])
+@app.route("/ticket/<int:ticket_id>/feedback", methods=["GET", "POST"])
 def ticket_feedback(ticket_id: int):
-    """Submits student feedback rating (1-5 stars) and comment for completed ticket."""
-    rating = request.form.get("rating", type=int)
-    comment = request.form.get("comment", "").strip()
+    """Student feedback survey workflow for completed registrar tickets."""
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, student_id, full_name, request_type, status, served_at, feedback_rating, feedback_comment, feedback_submitted_at
+        FROM tickets WHERE id = ?
+    """, (ticket_id,))
+    row = cursor.fetchone()
+    conn.close()
 
-    if rating and 1 <= rating <= 5:
+    if not row:
+        flash("Ticket not found.", "danger")
+        return redirect(url_for("checkin"))
+
+    ticket = {
+        "id": row[0],
+        "student_id": row[1],
+        "full_name": row[2],
+        "request_type": row[3],
+        "status": row[4],
+        "served_at": row[5],
+        "feedback_rating": row[6],
+        "feedback_comment": row[7],
+        "feedback_submitted_at": row[8]
+    }
+
+    # Guard condition: Feedback can only be submitted for tickets with status == 'SERVED'
+    if ticket["status"] != "SERVED":
+        flash("Feedback can only be submitted for completed/served tickets.", "warning")
+        return redirect(url_for("ticket_status", ticket_id=ticket_id))
+
+    if request.method == "POST":
+        # Prevent double submission
+        if ticket["feedback_rating"] is not None:
+            flash("Feedback has already been submitted for this ticket.", "info")
+            return render_template("feedback.html", ticket=ticket, user=session.get("user"))
+
+        try:
+            rating = int(request.form.get("rating", 0))
+        except (ValueError, TypeError):
+            rating = 0
+
+        comment = request.form.get("comment", "").strip()[:500]
+
+        if not (1 <= rating <= 5):
+            flash("Please select a valid star rating between 1 and 5 stars.", "danger")
+            return render_template("feedback.html", ticket=ticket, user=session.get("user"))
+
+        submitted_at = time.time()
         conn = sqlite3.connect(DB)
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE tickets
             SET feedback_rating = ?, feedback_comment = ?, feedback_submitted_at = ?
             WHERE id = ? AND status = 'SERVED'
-        """, (rating, comment, time.time(), ticket_id))
+        """, (rating, comment, submitted_at, ticket_id))
         conn.commit()
         conn.close()
-        flash("Thank you for your feedback!", "success")
 
-    return redirect(url_for("ticket_status", ticket_id=ticket_id))
+        # Update local dictionary state for rendering read-only view
+        ticket["feedback_rating"] = rating
+        ticket["feedback_comment"] = comment
+        ticket["feedback_submitted_at"] = submitted_at
+
+        flash("Thank you for your feedback! Your response has been recorded.", "success")
+        return render_template("feedback.html", ticket=ticket, user=session.get("user"))
+
+    return render_template("feedback.html", ticket=ticket, user=session.get("user"))
 
 
 @app.route("/dashboard")
@@ -1112,6 +1163,14 @@ def chart_volume():
 def chart_distribution():
     """Returns PNG chart bytes for Priority Score Distribution."""
     img_bytes = analytics.generate_priority_distribution_chart(DB)
+    return Response(img_bytes, mimetype="image/png")
+
+
+@app.route("/api/analytics/feedback.png")
+@staff_required
+def chart_feedback():
+    """Returns PNG chart bytes for Student Feedback Satisfaction Ratings."""
+    img_bytes = analytics.generate_feedback_rating_chart(DB)
     return Response(img_bytes, mimetype="image/png")
 
 

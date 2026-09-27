@@ -1,6 +1,6 @@
 """
 MapuaQ Analytics Module
-Generates queue volume analytics and priority distribution visualizations using Matplotlib.
+Generates queue volume analytics, priority distribution visualizations, and student feedback satisfaction metrics using Matplotlib.
 """
 
 import io
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 
 def get_analytics_summary(db_path: str = "students_queue.db") -> dict:
-    """Returns key queue metrics from SQLite database."""
+    """Returns key queue metrics and student feedback satisfaction statistics from SQLite database."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -30,6 +30,20 @@ def get_analytics_summary(db_path: str = "students_queue.db") -> dict:
     cursor.execute("SELECT grade_level, COUNT(*) FROM tickets GROUP BY grade_level")
     by_level = dict(cursor.fetchall())
 
+    # Feedback Satisfaction Metrics
+    cursor.execute("SELECT COUNT(*), AVG(feedback_rating) FROM tickets WHERE feedback_rating IS NOT NULL")
+    fb_row = cursor.fetchone()
+    total_feedback = fb_row[0] if fb_row and fb_row[0] else 0
+    avg_satisfaction = round(fb_row[1], 2) if (fb_row and fb_row[1] is not None) else 0.0
+
+    response_rate = round((total_feedback / served * 100), 1) if served > 0 else 0.0
+
+    cursor.execute("SELECT feedback_rating, COUNT(*) FROM tickets WHERE feedback_rating IS NOT NULL GROUP BY feedback_rating")
+    rating_dist = {i: 0 for i in range(1, 6)}
+    for r, count in cursor.fetchall():
+        if r in rating_dist:
+            rating_dist[r] = count
+
     conn.close()
 
     return {
@@ -38,6 +52,10 @@ def get_analytics_summary(db_path: str = "students_queue.db") -> dict:
         "served_tickets": served,
         "by_request": by_request,
         "by_level": by_level,
+        "total_feedback_count": total_feedback,
+        "average_satisfaction": avg_satisfaction,
+        "satisfaction_response_rate": response_rate,
+        "rating_distribution": rating_dist,
     }
 
 
@@ -108,6 +126,45 @@ def generate_priority_distribution_chart(db_path: str = "students_queue.db") -> 
         ax.text(0.5, 0.5, 'No Ticket Data Available', horizontalalignment='center',
                 verticalalignment='center', transform=ax.transAxes, fontsize=12, color='gray')
         ax.set_title('MapuaQ Priority Score Distribution', fontsize=13, fontweight='bold', pad=15)
+
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def generate_feedback_rating_chart(db_path: str = "students_queue.db") -> bytes:
+    """Generates a PNG bar chart of Student Feedback Satisfaction Star Ratings (1-5 Stars)."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT feedback_rating, COUNT(*)
+        FROM tickets
+        WHERE feedback_rating IS NOT NULL
+        GROUP BY feedback_rating
+    """)
+    rows = dict(cursor.fetchall())
+    conn.close()
+
+    labels = ['1 Star', '2 Stars', '3 Stars', '4 Stars', '5 Stars']
+    counts = [rows.get(i, 0) for i in range(1, 6)]
+
+    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
+
+    if any(counts):
+        rects = ax.bar(labels, counts, color='#F1B82D', edgecolor='#800000', linewidth=1.5, alpha=0.9)
+        ax.set_xlabel('Satisfaction Star Rating', fontsize=11, fontweight='bold')
+        ax.set_ylabel('Number of Student Ratings', fontsize=11, fontweight='bold')
+        ax.set_title('MapuaQ Student Satisfaction Ratings', fontsize=13, fontweight='bold', pad=15)
+        ax.grid(axis='y', linestyle='--', alpha=0.5)
+        ax.bar_label(rects, padding=3, fontweight='bold')
+    else:
+        ax.text(0.5, 0.5, 'No Student Feedback Recorded Yet', horizontalalignment='center',
+                verticalalignment='center', transform=ax.transAxes, fontsize=12, color='gray')
+        ax.set_title('MapuaQ Student Satisfaction Ratings', fontsize=13, fontweight='bold', pad=15)
 
     plt.tight_layout()
 
