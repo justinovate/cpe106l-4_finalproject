@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapuaQ - Student Portal</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/logo_icon.svg">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-mapua-cardinal { background-color: #800000; }
+        .text-mapua-cardinal { color: #800000; }
+        .btn-mapua-cardinal { background-color: #800000; color: white; border: none; font-weight: 600; }
+        .btn-mapua-cardinal:hover { background-color: #600000; color: white; }
+        .avatar-sm { width: 36px; height: 36px; object-fit: cover; }
+        .avatar-md { width: 72px; height: 72px; object-fit: cover; border: 3px solid #800000; }
+        .active-ticket-card {
+            background: linear-gradient(135deg, #800000 0%, #4a0000 100%);
+            color: white;
+        }
+        .pulse-badge {
+            animation: pulse 1.8s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="/student">
+            <img src="/static/images/logo_icon_white.svg" alt="MapúaQ Logo" style="height: 32px;" class="me-2">
+            <span>MapúaQ</span>
+            <span class="badge bg-warning text-dark fs-6 ms-2">Student Portal</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#studentNavbar">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="studentNavbar">
+            <div class="navbar-nav me-auto">
+                <a class="nav-link active fw-bold text-warning" href="/student">Student Home</a>
+                <a class="nav-link fw-bold" href="/checkin">Issue New Ticket</a>
+                <a class="nav-link fw-bold" href="/profile">My Profile</a>
+            </div>
+            <div class="navbar-nav align-items-center">
+                <span class="navbar-text text-light me-3 d-flex align-items-center">
+                    <img src="{{ user.avatar_url if user else '/static/uploads/avatars/default.png' }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white" style="object-position: {{ user.avatar_position if user else 'center' }};">
+                    <strong>{{ user.full_name if user else 'Student' }}</strong>
+                </span>
+                <a href="/logout" class="btn btn-outline-light btn-sm fw-bold">Logout</a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<div class="container pb-5">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show mb-4 shadow-sm" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Welcome & Student Profile Banner -->
+    <div class="card shadow-sm border-0 rounded-3 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex flex-column flex-md-row align-items-center align-items-md-start text-center text-md-start">
+                <img src="{{ user_info.avatar_url }}" alt="Profile Picture" class="rounded-circle avatar-md me-md-4 mb-3 mb-md-0 shadow-sm" style="object-position: {{ user_info.avatar_position or 'center' }};">
+                <div class="flex-grow-1">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center align-items-md-start mb-2">
+                        <div>
+                            <h3 class="fw-bold mb-1 text-dark">Welcome back, {{ user_info.full_name }}! 👋</h3>
+                            <p class="text-muted mb-0">Student Portal &amp; Registrar Priority Queuing Hub</p>
+                        </div>
+                        <div class="mt-3 mt-md-0 d-flex gap-2">
+                            <a href="/checkin" class="btn btn-mapua-cardinal px-3 py-2 shadow-sm">
+                                🎟️ Send Request / Get Ticket
+                            </a>
+                            <a href="/profile" class="btn btn-outline-secondary px-3 py-2 fw-bold">
+                                👤 Edit Profile
+                            </a>
+                        </div>
+                    </div>
+                    <hr class="my-3 text-muted opacity-25">
+                    <div class="row g-3 text-start">
+                        <div class="col-6 col-md-3">
+                            <small class="text-secondary fw-bold d-block">STUDENT ID</small>
+                            <span class="fw-bold text-dark fs-6">{{ user_info.student_id or 'N/A' }}</span>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <small class="text-secondary fw-bold d-block">MAPÚA EMAIL</small>
+                            <span class="fw-bold text-dark fs-6">{{ user_info.email }}</span>
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <small class="text-secondary fw-bold d-block">PROGRAM / DEPARTMENT</small>
+                            <span class="fw-bold text-dark fs-6">{{ user_info.program_dept or 'Mapúa University' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Ticket Alert / Card -->
+    {% if active_ticket %}
+        <div class="card active-ticket-card shadow-lg border-0 rounded-3 mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
+                    <div class="mb-3 mb-md-0 text-center text-md-start">
+                        <div class="d-flex align-items-center justify-content-center justify-content-md-start mb-2">
+                            <span class="badge bg-warning text-dark px-3 py-2 fs-6 fw-bold me-2">ACTIVE TICKET</span>
+                            {% if active_ticket.status == 'CALLED' %}
+                                <span class="badge bg-success pulse-badge px-3 py-2 fs-6 fw-bold">📢 CALLED TO COUNTER!</span>
+                            {% else %}
+                                <span class="badge bg-light text-dark px-3 py-2 fs-6 fw-bold">⏳ IN QUEUE</span>
+                            {% endif %}
+                        </div>
+                        <h2 class="fw-bold mb-1">Ticket #{{ active_ticket.id }}</h2>
+                        <p class="mb-1 text-light opacity-90 fs-5 fw-semibold">{{ active_ticket.request_type }}</p>
+                        <small class="text-light opacity-75">Checked in at: {{ active_ticket.arrival_timestamp | datetimeformat if active_ticket.arrival_timestamp else 'Just now' }}</small>
+                    </div>
+
+                    <div class="text-center text-md-end">
+                        {% if active_ticket.status == 'WAITING' %}
+                            <div class="mb-3">
+                                <div class="fs-4 fw-bold text-warning">{{ students_ahead }} Ahead in Line</div>
+                                <small class="text-light opacity-75">Estimated Wait Time: ~{{ estimated_wait_mins }} mins</small>
+                            </div>
+                        {% else %}
+                            <div class="mb-3">
+                                <div class="fs-4 fw-bold text-success">Counter Ready</div>
+                                <small class="text-light opacity-90">Please proceed to Registrar Counter Window!</small>
+                            </div>
+                        {% endif %}
+                        <a href="/ticket/{{ active_ticket.id }}" class="btn btn-warning text-dark fw-bold px-4 py-2 shadow-sm">
+                            📱 View Live Status Screen
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="card shadow-sm border-0 rounded-3 mb-4 text-center py-4 bg-white">
+            <div class="card-body">
+                <div class="fs-1 mb-2">🎟️</div>
+                <h4 class="fw-bold text-dark mb-1">Need Assistance from the Registrar?</h4>
+                <p class="text-muted mb-3" style="max-width: 500px; margin: 0 auto;">
+                    Submit a queue request ticket online before visiting the counter window. Priority queuing automatically prioritizes urgent graduation and crediting requests.
+                </p>
+                <a href="/checkin" class="btn btn-mapua-cardinal px-4 py-2 fs-6 fw-bold shadow-sm">
+                    Submit Queue Request Ticket
+                </a>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Ticket History Section -->
+    <div class="card shadow-sm border-0 rounded-3">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">📜 My Registrar Request History</h5>
+            <span class="badge bg-secondary">{{ tickets | length }} Request(s)</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Ticket ID</th>
+                        <th>Request Type</th>
+                        <th>Status</th>
+                        <th>Date / Time</th>
+                        <th>Remarks / Feedback</th>
+                        <th class="pe-4 text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tickets %}
+                        <tr>
+                            <td class="ps-4 fw-bold">#{{ t.id }}</td>
+                            <td class="fw-semibold text-dark">{{ t.request_type }}</td>
+                            <td>
+                                {% if t.status == 'WAITING' %}
+                                    <span class="badge bg-warning text-dark px-2 py-1">WAITING</span>
+                                {% elif t.status == 'CALLED' %}
+                                    <span class="badge bg-primary px-2 py-1">CALLED</span>
+                                {% elif t.status == 'SERVED' %}
+                                    <span class="badge bg-success px-2 py-1">SERVED</span>
+                                {% elif t.status == 'SKIPPED' %}
+                                    <span class="badge bg-secondary px-2 py-1">SKIPPED</span>
+                                {% endif %}
+                            </td>
+                            <td class="small text-muted">
+                                {{ t.arrival_timestamp | datetimeformat }}
+                            </td>
+                            <td class="small">
+                                {% if t.remarks and t.remarks != '—' %}
+                                    <span class="text-secondary d-block"><strong>Staff Note:</strong> {{ t.remarks }}</span>
+                                {% endif %}
+                                {% if t.feedback_rating %}
+                                    <span class="text-warning">
+                                        {% for i in range(t.feedback_rating) %}★{% endfor %}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="pe-4 text-end">
+                                <a href="/ticket/{{ t.id }}" class="btn btn-sm btn-outline-danger fw-bold">
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                No previous registrar request tickets found.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

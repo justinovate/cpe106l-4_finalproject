@@ -21,12 +21,23 @@
 </head>
 <body class="bg-light d-flex flex-column min-vh-100">
 
-<nav class="navbar navbar-dark bg-mapua-cardinal shadow-sm">
+<nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm">
     <div class="container">
-        <a class="navbar-brand fw-bold" href="/">
-            MapuaQ <span class="badge bg-warning text-dark fs-6 ms-1">Student Ticket Tracker</span>
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="/student">
+            <img src="/static/images/logo_icon_white.svg" alt="MapúaQ Logo" style="height: 32px;" class="me-2">
+            <span>MapúaQ</span>
+            <span class="badge bg-warning text-dark fs-6 ms-2">Ticket Tracker</span>
         </a>
-        <a href="/checkin" class="btn btn-outline-light btn-sm">New Check-In</a>
+        <div class="navbar-nav ms-auto align-items-center">
+            {% if user %}
+                <a class="nav-link fw-bold" href="/student">Student Home</a>
+                <a class="nav-link fw-bold" href="/checkin">Issue Ticket</a>
+                <a class="nav-link fw-bold" href="/profile">My Profile</a>
+                <a class="nav-link text-warning fw-bold ms-2" href="/logout">Logout</a>
+            {% else %}
+                <a href="/checkin" class="btn btn-outline-light btn-sm fw-bold">New Check-In</a>
+            {% endif %}
+        </div>
     </div>
 </nav>
 

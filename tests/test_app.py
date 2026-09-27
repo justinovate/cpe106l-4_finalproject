@@ -390,6 +390,36 @@ class TestMapuaQRoutes(unittest.TestCase):
         conn.close()
         self.assertEqual(count, 0)
 
+    def test_student_dashboard_route_and_name_reflection(self):
+        """Verifies student login reflects real full_name (not password hash) and renders /student portal."""
+        # Arrange: Provision student
+        self._login_as_admin()
+        self.client.post("/admin/users", data={
+            "student_id": "2024180029",
+            "email": "jaddeleon@mymail.mapua.edu.ph",
+            "full_name": "Jad De Leon",
+            "program_dept": "BS Computer Engineering",
+            "password": "StudentPass2026!",
+            "role": "student"
+        })
+        self.client.get("/logout")
+
+        # Act: Log in as student
+        res = self.client.post("/login", data={
+            "identifier": "2024180029",
+            "password": "StudentPass2026!"
+        }, follow_redirects=True)
+
+        # Assert: Lands on Student Portal (/student) with full_name reflecting correctly
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Welcome back, Jad De Leon!", res.data)
+        self.assertNotIn(b"scrypt:", res.data)
+        
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess["user"]["full_name"], "Jad De Leon")
+            self.assertEqual(sess["user"]["email"], "jaddeleon@mymail.mapua.edu.ph")
+            self.assertEqual(sess["user"]["role"], "student")
+
 
 if __name__ == "__main__":
     unittest.main()

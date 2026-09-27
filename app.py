@@ -7,6 +7,7 @@ Min-Heap Priority Scheduling, and Servicing Audit Trail.
 import os
 import re
 import time
+import datetime
 import uuid
 import sqlite3
 from functools import wraps
@@ -189,15 +190,146 @@ def load_queue_from_db() -> RegistrarMinHeapQueue:
     return queue
 
 
+@app.template_filter("datetimeformat")
+def datetimeformat(value, format="%b %d, %Y %I:%M %p"):
+    """Formats epoch timestamp float into readable date-time string."""
+    if value is None:
+        return ""
+    try:
+        return datetime.datetime.fromtimestamp(float(value)).strftime(format)
+    except (ValueError, TypeError):
+        return str(value)
+
+
 @app.route("/")
 def index():
-    """Main Entry Point — Redirects unauthenticated users directly to unified /login."""
+    """Main Entry Point — Redirects authenticated users to their portal or unauthenticated to /login."""
     if "user" in session:
         role = session["user"].get("role")
         if role in ("staff", "admin"):
             return redirect(url_for("dashboard"))
-        return redirect(url_for("checkin"))
+        return redirect(url_for("student_dashboard"))
     return redirect(url_for("login"))
+
+
+@app.route("/student")
+@app.route("/student/dashboard")
+@login_required
+def student_dashboard():
+    """Student Portal Home Page — Displays welcome banner, quick actions (Request Ticket, Edit Profile), and active/past ticket history."""
+    if session.get("user", {}).get("role") in ("staff", "admin"):
+        return redirect(url_for("dashboard"))
+
+    user_id = session["user"]["id"]
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+
+    # Fetch fresh student profile details from database
+    cursor.execute("""
+        SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at
+        FROM students WHERE id = ?
+    """, (user_id,))
+    u_row = cursor.fetchone()
+
+    if not u_row:
+        conn.close()
+        session.pop("user", None)
+        flash("Student account not found. Please log in again.", "danger")
+        return redirect(url_for("login"))
+
+    user_info = {
+        "id": u_row[0],
+        "student_id": u_row[1],
+        "email": u_row[2],
+        "full_name": u_row[3],
+        "role": "student",
+        "program_dept": u_row[4],
+        "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
+        "avatar_position": u_row[6] or "center",
+        "phone_number": u_row[7] or "",
+        "created_at": u_row[8]
+    }
+
+    # Synchronize session state with current database details
+    session["user"]["full_name"] = user_info["full_name"]
+    session["user"]["student_id"] = user_info["student_id"]
+    session["user"]["email"] = user_info["email"]
+    session["user"]["avatar_url"] = user_info["avatar_url"]
+    session["user"]["avatar_position"] = user_info["avatar_position"]
+
+    # Fetch active ticket (status = 'WAITING' or 'CALLED')
+    cursor.execute("""
+        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, served_by, remarks
+        FROM tickets
+        WHERE (user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?))
+          AND status IN ('WAITING', 'CALLED')
+        ORDER BY arrival_timestamp DESC
+        LIMIT 1
+    """, (user_id, user_info["email"], user_info["student_id"]))
+    active_row = cursor.fetchone()
+
+    active_ticket = None
+    students_ahead = 0
+    estimated_wait_mins = 0
+
+    if active_row:
+        active_ticket = {
+            "id": active_row[0],
+            "student_id": active_row[1],
+            "full_name": active_row[2],
+            "request_type": active_row[3],
+            "arrival_timestamp": active_row[4],
+            "status": active_row[5],
+            "priority_score": active_row[6],
+            "served_at": active_row[7],
+            "served_by": active_row[8],
+            "remarks": active_row[9]
+        }
+        if active_ticket["status"] == "WAITING":
+            queue = load_queue_from_db()
+            sorted_queue = queue.get_sorted_list()
+            for idx, t in enumerate(sorted_queue):
+                if t.ticket_id == active_ticket["id"]:
+                    students_ahead = idx
+                    break
+            estimated_wait_mins = students_ahead * 5
+
+    # Fetch full ticket history for this student
+    cursor.execute("""
+        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment, remarks
+        FROM tickets
+        WHERE (user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?))
+        ORDER BY arrival_timestamp DESC
+    """, (user_id, user_info["email"], user_info["student_id"]))
+    t_rows = cursor.fetchall()
+
+    my_tickets = []
+    for r in t_rows:
+        my_tickets.append({
+            "id": r[0],
+            "student_id": r[1],
+            "full_name": r[2],
+            "request_type": r[3],
+            "arrival_timestamp": r[4],
+            "status": r[5],
+            "priority_score": r[6],
+            "served_at": r[7],
+            "feedback_rating": r[8],
+            "feedback_comment": r[9],
+            "remarks": r[10] or "—"
+        })
+
+    conn.close()
+
+    return render_template(
+        "student_dashboard.html",
+        user_info=user_info,
+        active_ticket=active_ticket,
+        students_ahead=students_ahead,
+        estimated_wait_mins=estimated_wait_mins,
+        tickets=my_tickets,
+        user=session.get("user")
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -249,15 +381,15 @@ def login():
                 "id": std_row[0],
                 "student_id": std_row[1],
                 "email": std_row[2],
-                "full_name": std_row[3],
+                "full_name": std_row[4],
                 "role": "student",
-                "program_dept": std_row[4],
-                "avatar_url": std_row[5] or "/static/uploads/avatars/default.png",
+                "program_dept": std_row[5],
+                "avatar_url": std_row[6] or "/static/uploads/avatars/default.png",
                 "username": std_row[1] or std_row[2],
                 "account_type": "student"
             }
-            flash(f"Welcome back, {std_row[3]}!", "success")
-            return redirect(url_for("checkin"))
+            flash(f"Welcome back, {std_row[4]}!", "success")
+            return redirect(url_for("student_dashboard"))
 
         flash("Invalid credentials. Please verify your Email / Account ID and password.", "danger")
 
