@@ -121,8 +121,9 @@ def init_db():
         """, (staff_pass_hash, time.time()))
         conn.commit()
 
-    # Purge all student accounts as requested ("remove the students account. all of them. I will add my own")
+    # Purge all student accounts and active tickets as requested
     cursor.execute("DELETE FROM students")
+    cursor.execute("DELETE FROM tickets")
     conn.commit()
 
     conn.close()
