@@ -1,18 +1,29 @@
 """
 MapuaQ Analytics Module
 Generates queue volume analytics, priority distribution visualizations, and student feedback satisfaction metrics using Matplotlib.
+Configured for headless web server rendering (matplotlib.use('Agg')).
 """
+
+import matplotlib
+matplotlib.use('Agg')  # Headless backend MUST be configured before importing pyplot
+import matplotlib.pyplot as plt
 
 import io
 import sqlite3
-import matplotlib
-matplotlib.use('Agg')  # Headless backend for web server rendering
-import matplotlib.pyplot as plt
+from config import Config
 
 
-def get_analytics_summary(db_path: str = "students_queue.db") -> dict:
+def _resolve_db_path(db_path: str = None) -> str:
+    """Resolves database path to absolute Config.DB_NAME if default or relative path provided."""
+    if not db_path or db_path == "students_queue.db":
+        return Config.DB_NAME
+    return db_path
+
+
+def get_analytics_summary(db_path: str = None) -> dict:
     """Returns key queue metrics and student feedback satisfaction statistics from SQLite database."""
-    conn = sqlite3.connect(db_path)
+    target_db = _resolve_db_path(db_path)
+    conn = sqlite3.connect(target_db)
     cursor = conn.cursor()
 
     cursor.execute("SELECT COUNT(*) FROM tickets")
@@ -59,9 +70,10 @@ def get_analytics_summary(db_path: str = "students_queue.db") -> dict:
     }
 
 
-def generate_queue_volume_chart(db_path: str = "students_queue.db") -> bytes:
+def generate_queue_volume_chart(db_path: str = None) -> bytes:
     """Generates a PNG bar chart of queue volume by Request Type and Status."""
-    conn = sqlite3.connect(db_path)
+    target_db = _resolve_db_path(db_path)
+    conn = sqlite3.connect(target_db)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -106,9 +118,10 @@ def generate_queue_volume_chart(db_path: str = "students_queue.db") -> bytes:
     return buf.getvalue()
 
 
-def generate_priority_distribution_chart(db_path: str = "students_queue.db") -> bytes:
+def generate_priority_distribution_chart(db_path: str = None) -> bytes:
     """Generates a PNG histogram of priority score distribution."""
-    conn = sqlite3.connect(db_path)
+    target_db = _resolve_db_path(db_path)
+    conn = sqlite3.connect(target_db)
     cursor = conn.cursor()
     cursor.execute("SELECT priority_score FROM tickets")
     scores = [r[0] for r in cursor.fetchall()]
@@ -136,9 +149,10 @@ def generate_priority_distribution_chart(db_path: str = "students_queue.db") -> 
     return buf.getvalue()
 
 
-def generate_feedback_rating_chart(db_path: str = "students_queue.db") -> bytes:
+def generate_feedback_rating_chart(db_path: str = None) -> bytes:
     """Generates a PNG bar chart of Student Feedback Satisfaction Star Ratings (1-5 Stars)."""
-    conn = sqlite3.connect(db_path)
+    target_db = _resolve_db_path(db_path)
+    conn = sqlite3.connect(target_db)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT feedback_rating, COUNT(*)

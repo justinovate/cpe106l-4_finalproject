@@ -1,6 +1,7 @@
 """
 MapuaQ System Configuration & Environment Settings
 Loads variables from .env using python-dotenv.
+Enforces absolute paths for database persistence on headless production WSGI servers.
 """
 
 import os
@@ -9,10 +10,17 @@ from dotenv import load_dotenv
 # Load environment variables from .env file if present
 load_dotenv()
 
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "mapuaq_registrar_secret_key_2026_super_secure")
-    DB_NAME = os.environ.get("DB_NAME", "students_queue.db")
+    
+    _db_env = os.environ.get("DB_NAME", "students_queue.db")
+    if not os.path.isabs(_db_env):
+        DB_NAME = os.path.join(BASE_DIR, _db_env)
+    else:
+        DB_NAME = _db_env
 
     # Email Notification Configuration & Dual-Mode Toggle
     EMAIL_DEV_MODE = os.environ.get("EMAIL_DEV_MODE", "True").strip().lower() in ("true", "1", "t", "yes")
