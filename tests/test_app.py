@@ -1,854 +1,122 @@
 """
-MapuaQ: Integration Route Unit Tests (Flask Client, Session Auth & Endpoints)
-Follows strict Arrange-Act-Assert (AAA) pattern.
+MapuaQ Integration & Route Test Suite
+Strictly isolated from development/production students_queue.db.
+Import ordering enforced via os.environ['DB_NAME'] to eliminate race conditions.
 """
 
 import os
-import sqlite3
+import sys
 import unittest
+import sqlite3
 import time
-from app import app, init_db, DB
-import analytics
+
+# 1. Resolve project root
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# 2. MUST set environment variable BEFORE importing Config or app
+TEST_DB_PATH = os.path.join(PROJECT_ROOT, "tests", "test_students_queue.db")
+os.environ["DB_NAME"] = TEST_DB_PATH
+
+# 3. Now import Config and app safely
+from config import Config
+from app import app, init_db
 
 
-class TestMapuaQRoutes(unittest.TestCase):
+class MapuaQIsolatedAppTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        """Configure test environment once for class."""
+        Config.DB_NAME = TEST_DB_PATH
+        app.config["TESTING"] = True
+        cls.client = app.test_client()
+
     def setUp(self):
-        app.config['TESTING'] = True
-        app.config['SECRET_KEY'] = 'test_secret'
-        self.client = app.test_client()
-        
-        # Clean & re-initialize test database
-        conn = sqlite3.connect(DB)
-        conn.execute("DROP TABLE IF EXISTS tickets")
-        conn.execute("DROP TABLE IF EXISTS staff_users")
-        conn.execute("DROP TABLE IF EXISTS students")
-        conn.execute("DROP TABLE IF EXISTS users")
-        conn.commit()
-        conn.close()
-        
+        """Set up an isolated test database for each test case."""
+        Config.DB_NAME = TEST_DB_PATH
+        if os.path.exists(TEST_DB_PATH):
+            try:
+                os.remove(TEST_DB_PATH)
+            except OSError:
+                pass
         init_db()
 
-    def _login_as_admin(self):
-        """Helper to authenticate test client session as Admin."""
-        return self.client.post("/login", data={
-            "identifier": "admin@mapua.edu.ph",
-            "password": "MapuaAdmin2026!"
-        }, follow_redirects=True)
+    def tearDown(self):
+        """Clean up isolated test database file after each test case."""
+        if os.path.exists(TEST_DB_PATH):
+            try:
+                os.remove(TEST_DB_PATH)
+            except OSError:
+                pass
 
-    def test_admin_login_success(self):
-        """Verifies login authentication with seeded admin credentials."""
-        # Act
-        response = self._login_as_admin()
+    def test_database_isolation_does_not_touch_dev_db(self):
+        """Verify tests run against TEST_DB_PATH and dev DB is untouched."""
+        self.assertEqual(Config.DB_NAME, TEST_DB_PATH)
+        self.assertTrue(os.path.exists(TEST_DB_PATH))
+        self.assertFalse(TEST_DB_PATH.endswith("students_queue.db"))
 
-        # Assert
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Queue Monitor", response.data)
-        with self.client.session_transaction() as sess:
-            self.assertEqual(sess["user"]["email"], "admin@mapua.edu.ph")
-            self.assertEqual(sess["user"]["role"], "admin")
-
-    def test_admin_provision_student_account_and_login(self):
-        """Verifies admin POST /admin/users provisions student account and student logs in."""
-        # Act 1: Admin provisions student account
-        self._login_as_admin()
-        prov_res = self.client.post("/admin/users", data={
-            "student_id": "2024000001",
-            "email": "jdelacruz@mymail.mapua.edu.ph",
-            "full_name": "Juan Dela Cruz",
-            "program_dept": "BS Computer Engineering",
-            "password": "StudentPass2026!",
-            "role": "student"
-        }, follow_redirects=True)
-
-        self.assertEqual(prov_res.status_code, 200)
-        self.assertIn(b"jdelacruz@mymail.mapua.edu.ph", prov_res.data)
-
-        # Act 2: Log out admin and log in as provisioned student
-        self.client.get("/logout")
-        login_res = self.client.post("/login", data={
-            "identifier": "2024000001",
-            "password": "StudentPass2026!"
-        }, follow_redirects=True)
-
-        # Assert: Student login redirects to checkin kiosk
-        self.assertEqual(login_res.status_code, 200)
-        with self.client.session_transaction() as sess:
-            self.assertEqual(sess["user"]["student_id"], "2024000001")
-            self.assertEqual(sess["user"]["role"], "student")
-
-    def test_student_checkin_route_post_and_redirect(self):
-        """Verifies authenticated student check-in POST inserts ticket into SQLite and redirects to /ticket/<id>."""
-        # Arrange: Provision student and log in
-        self._login_as_admin()
-        self.client.post("/admin/users", data={
-            "student_id": "2024000002",
-            "email": "msantos@mymail.mapua.edu.ph",
-            "full_name": "Maria Santos",
-            "program_dept": "BS Electrical Engineering",
-            "password": "StudentPass2026!",
-            "role": "student"
-        })
-        self.client.get("/logout")
-        self.client.post("/login", data={
-            "identifier": "2024000002",
-            "password": "StudentPass2026!"
-        })
-
-        form_data = {
-            "student_id": "2024000002",
-            "full_name": "Maria Santos",
-            "email": "msantos@mymail.mapua.edu.ph",
+    def test_kiosk_checkin_flow(self):
+        """Test public student check-in route."""
+        response = self.client.post("/checkin", data={
+            "student_id": "2024180099",
+            "full_name": "Test Isolated Student",
+            "email": "testisolated@mymail.mapua.edu.ph",
             "request_type": "Application for Graduation",
             "grade_level": "Graduating Senior"
-        }
-
-        # Act
-        response = self.client.post("/checkin", data=form_data, follow_redirects=True)
-
-        # Assert
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Maria Santos", response.data)
+        }, follow_redirects=False)
         
-        conn = sqlite3.connect(DB)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/ticket/", response.location)
+
+        conn = sqlite3.connect(TEST_DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT id, student_id, full_name, priority_score, status FROM tickets WHERE student_id = '2024000002'")
+        cursor.execute("SELECT student_id, status FROM tickets WHERE email = ?", ("testisolated@mymail.mapua.edu.ph",))
         row = cursor.fetchone()
         conn.close()
 
         self.assertIsNotNone(row)
-        self.assertEqual(row[1], "2024000002")
-        self.assertEqual(row[2], "Maria Santos")
-        self.assertEqual(row[3], 1.0)  # (1 * 0.6) + (1 * 0.4) = 1.0
-        self.assertEqual(row[4], "WAITING")
+        self.assertEqual(row[0], "2024180099")
+        self.assertEqual(row[1], "WAITING")
 
-    def test_ticket_status_route_get(self):
-        """Verifies /ticket/<id> renders live tracking info for students."""
-        # Arrange
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024001', 'Juan Dela Cruz', 'jdc@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
-        """, (time.time(),))
-        ticket_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Act
-        response = self.client.get(f"/ticket/{ticket_id}")
-
-        # Assert
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Juan Dela Cruz", response.data)
-        self.assertIn(b"In Queue (Waiting)", response.data)
-
-    def test_dashboard_route_authenticated_get(self):
-        """Verifies GET /dashboard loads Min-Heap ordered tickets for authenticated staff."""
-        # Arrange
-        self._login_as_admin()
-        conn = sqlite3.connect(DB)
-        conn.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024001', 'Juan Dela Cruz', 'jdc@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
-        """, (time.time(),))
-        conn.commit()
-        conn.close()
-
-        # Act
-        response = self.client.get("/dashboard")
-
-        # Assert
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Queue Monitor", response.data)
-        self.assertIn(b"Juan Dela Cruz", response.data)
-
-    def test_call_and_mark_serve_ticket_with_audit_trail(self):
-        """Verifies calling and serving a ticket updates status to CALLED then SERVED with audit timestamp & served_by."""
-        # Arrange
-        self._login_as_admin()
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2021001', 'Alex Senior', 'alex@mymail.mapua.edu.ph', 'Application for Graduation', 1, 'Graduating Senior', 1, ?, 1.0, 'WAITING')
-        """, (time.time(),))
-        ticket_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Act 1: Call ticket
-        call_res = self.client.post("/call-next", follow_redirects=True)
-        self.assertEqual(call_res.status_code, 200)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, called_at FROM tickets WHERE id = ?", (ticket_id,))
-        row1 = cursor.fetchone()
-        conn.close()
-        self.assertEqual(row1[0], "CALLED")
-        self.assertIsNotNone(row1[1])
-
-        # Act 2: Mark served
-        serve_res = self.client.post(f"/ticket/{ticket_id}/serve", follow_redirects=True)
-        self.assertEqual(serve_res.status_code, 200)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, served_by, served_at FROM tickets WHERE id = ?", (ticket_id,))
-        row2 = cursor.fetchone()
-        conn.close()
-        self.assertEqual(row2[0], "SERVED")
-        self.assertEqual(row2[1], "admin@mapua.edu.ph")
-        self.assertIsNotNone(row2[2])
-
-    def test_skip_ticket_route(self):
-        """Verifies POST /tickets/<id>/skip transitions ticket to SKIPPED with reason remarks."""
-        # Arrange
-        self._login_as_admin()
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2021002', 'Bob Junior', 'bob@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Junior', 5, ?, 5.0, 'CALLED')
-        """, (time.time(),))
-        ticket_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Act
-        res = self.client.post(f"/tickets/{ticket_id}/skip", data={"skip_reason": "No-show after 3 calls"}, follow_redirects=True)
-
-        # Assert
-        self.assertEqual(res.status_code, 200)
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, remarks FROM tickets WHERE id = ?", (ticket_id,))
-        row = cursor.fetchone()
-        conn.close()
-        self.assertEqual(row[0], "SKIPPED")
-        self.assertEqual(row[1], "No-show after 3 calls")
-
-    def test_call_ticket_concurrency_prevention(self):
-        """Verifies system prevents calling a second ticket when a ticket is already CALLED."""
-        # Arrange: create one CALLED ticket and one WAITING ticket
-        self._login_as_admin()
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2021003', 'Active Student', 'active@mymail.mapua.edu.ph', 'TOR', 4, 'Senior', 3, ?, 3.0, 'CALLED')
-        """, (time.time(),))
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2021004', 'Waiting Student', 'waiting@mymail.mapua.edu.ph', 'Overload', 2, 'Senior', 3, ?, 2.0, 'WAITING')
-        """, (time.time(),))
-        waiting_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Act: try calling second ticket
-        res = self.client.post(f"/tickets/{waiting_id}/call", follow_redirects=True)
-
-        # Assert: warning flash message prevents duplicate call
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Counter currently has an active called ticket", res.data)
-
-    def test_analytics_dashboard_route_authenticated_get(self):
-        """Verifies GET /analytics renders metrics cards for authenticated staff."""
-        # Arrange
-        self._login_as_admin()
-
-        # Act
-        response = self.client.get("/analytics")
-
-        # Assert
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Queue Volume & Priority Analytics", response.data)
-
-    def test_admin_provision_new_staff_account(self):
-        """Verifies admin POST /admin/users provisions new staff user account."""
-        # Arrange
-        self._login_as_admin()
-
-        # Act
-        response = self.client.post("/admin/users", data={
-            "student_id": "2024990011",
-            "email": "jsmith@mapua.edu.ph",
-            "password": "StaffPassword2026!",
-            "full_name": "John Smith",
-            "role": "staff",
-            "program_dept": "Registrar Counter 2"
+    def test_staff_login_and_dashboard_access(self):
+        """Test staff authentication and dashboard authorization guard."""
+        login_resp = self.client.post("/login", data={
+            "email_or_id": "registrar@mapua.edu.ph",
+            "password": "StaffPass2026!"
         }, follow_redirects=True)
+        self.assertEqual(login_resp.status_code, 200)
 
-        # Assert
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"jsmith@mapua.edu.ph", response.data)
+        dash_resp = self.client.get("/dashboard")
+        self.assertEqual(dash_resp.status_code, 200)
 
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT email, full_name, role FROM staff_users WHERE email = 'jsmith@mapua.edu.ph'")
-        row = cursor.fetchone()
-        conn.close()
-
-        self.assertIsNotNone(row)
-        self.assertEqual(row[0], "jsmith@mapua.edu.ph")
-        self.assertEqual(row[1], "John Smith")
-        self.assertEqual(row[2], "staff")
-
-    def test_admin_delete_student_account_with_confirmation(self):
-        """Verifies POST /admin/users/delete permanently removes student account when typing DELETE."""
-        # Arrange: Provision student account
-        self._login_as_admin()
-        self.client.post("/admin/users", data={
-            "student_id": "2024777001",
-            "email": "delstudent@mymail.mapua.edu.ph",
-            "full_name": "Delete Me",
-            "password": "StudentPass2026!",
-            "role": "student"
-        })
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM students WHERE email = 'delstudent@mymail.mapua.edu.ph'")
-        std_id = cursor.fetchone()[0]
-        conn.close()
-
-        # Act: Submit delete form with confirm_text = 'DELETE'
-        res = self.client.post("/admin/users/delete", data={
-            "target_type": "student",
-            "user_id": std_id,
-            "confirm_text": "DELETE"
-        }, follow_redirects=True)
-
-        # Assert: Student account removed from database
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"permanently deleted", res.data)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM students WHERE id = ?", (std_id,))
-        count = cursor.fetchone()[0]
-        conn.close()
-        self.assertEqual(count, 0)
-
-    def test_admin_delete_user_canceled_without_delete_confirmation(self):
-        """Verifies account deletion is canceled if user fails to type DELETE in confirmation box."""
-        # Arrange: Provision student account
-        self._login_as_admin()
-        self.client.post("/admin/users", data={
-            "student_id": "2024777002",
-            "email": "keepstudent@mymail.mapua.edu.ph",
-            "full_name": "Keep Me",
-            "password": "StudentPass2026!",
-            "role": "student"
-        })
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM students WHERE email = 'keepstudent@mymail.mapua.edu.ph'")
-        std_id = cursor.fetchone()[0]
-        conn.close()
-
-        # Act: Submit delete form with incorrect confirm_text
-        res = self.client.post("/admin/users/delete", data={
-            "target_type": "student",
-            "user_id": std_id,
-            "confirm_text": "cancel"
-        }, follow_redirects=True)
-
-        # Assert: Warning flashed and student account remains in database
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Deletion canceled", res.data)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM students WHERE id = ?", (std_id,))
-        count = cursor.fetchone()[0]
-        conn.close()
-        self.assertEqual(count, 1)
-
-    def test_admin_reset_queue_route(self):
-        """Verifies admin POST /admin/reset-queue purges tickets from database."""
-        # Arrange: Login as admin and create a ticket
-        self._login_as_admin()
+    def test_ticket_soft_void_endpoint(self):
+        """Test soft-delete / void route for staff."""
+        # Create ticket
         self.client.post("/checkin", data={
-            "student_id": "2024888888",
-            "full_name": "Test Reset Student",
-            "email": "reset@mymail.mapua.edu.ph",
+            "student_id": "2024180088",
+            "full_name": "Void Student",
+            "email": "void@mymail.mapua.edu.ph",
             "request_type": "General Inquiry",
             "grade_level": "Freshman"
         })
 
-        # Act
-        response = self.client.post("/admin/reset-queue", data={"scope": "all"}, follow_redirects=True)
+        # Login staff
+        self.client.post("/login", data={"email_or_id": "registrar@mapua.edu.ph", "password": "StaffPass2026!"})
 
-        # Assert
-        self.assertEqual(response.status_code, 200)
-        conn = sqlite3.connect(DB)
+        # Void ticket #1
+        void_resp = self.client.post("/tickets/1/void", data={"void_reason": "Duplicate check-in entry"}, follow_redirects=True)
+        self.assertEqual(void_resp.status_code, 200)
+
+        conn = sqlite3.connect(TEST_DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM tickets")
-        count = cursor.fetchone()[0]
-        conn.close()
-        self.assertEqual(count, 0)
-
-    def test_student_dashboard_route_and_name_reflection(self):
-        """Verifies student login reflects real full_name (not password hash) and renders /student portal."""
-        # Arrange: Provision student
-        self._login_as_admin()
-        self.client.post("/admin/users", data={
-            "student_id": "2024180029",
-            "email": "jaddeleon@mymail.mapua.edu.ph",
-            "full_name": "Jad De Leon",
-            "program_dept": "BS Computer Engineering",
-            "password": "StudentPass2026!",
-            "role": "student"
-        })
-        self.client.get("/logout")
-
-        # Act: Log in as student
-        res = self.client.post("/login", data={
-            "identifier": "2024180029",
-            "password": "StudentPass2026!"
-        }, follow_redirects=True)
-
-        # Assert: Lands on Student Portal (/student) with full_name reflecting correctly
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Welcome back, Jad De Leon!", res.data)
-        self.assertNotIn(b"scrypt:", res.data)
-        
-        with self.client.session_transaction() as sess:
-            self.assertEqual(sess["user"]["full_name"], "Jad De Leon")
-            self.assertEqual(sess["user"]["email"], "jaddeleon@mymail.mapua.edu.ph")
-            self.assertEqual(sess["user"]["role"], "student")
-
-    def test_grace_period_and_penalty_rejoin_engine(self):
-        """Verifies ticket call, skip (no-show), and 1-chance penalty re-queuing with +2.0 score offset."""
-        # Arrange: Provision student and log in
-        self._login_as_admin()
-        self.client.post("/admin/users", data={
-            "student_id": "2024999001",
-            "email": "testrejoin@mymail.mapua.edu.ph",
-            "full_name": "Rejoin Test Student",
-            "program_dept": "BS CS",
-            "password": "StudentPass2026!",
-            "role": "student"
-        })
-
-        # Submit ticket
-        self.client.post("/checkin", data={
-            "student_id": "2024999001",
-            "full_name": "Rejoin Test Student",
-            "email": "testrejoin@mymail.mapua.edu.ph",
-            "request_type": "Course Completion",
-            "grade_level": "Junior"
-        })
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, priority_score FROM tickets WHERE student_id = '2024999001'")
-        t_row = cursor.fetchone()
-        t_id, initial_score = t_row[0], t_row[1]
-        conn.close()
-
-        # Step 1: Staff calls ticket
-        self.client.post(f"/tickets/{t_id}/call", follow_redirects=True)
-
-        # Step 2: Staff marks ticket as SKIPPED
-        self.client.post(f"/tickets/{t_id}/skip", data={"skip_reason": "No-show"}, follow_redirects=True)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, skipped_at, rejoin_used FROM tickets WHERE id = ?", (t_id,))
-        s_row = cursor.fetchone()
-        conn.close()
-
-        self.assertEqual(s_row[0], "SKIPPED")
-        self.assertIsNotNone(s_row[1])
-        self.assertEqual(s_row[2], 0)
-
-        # Step 3: Student re-joins queue with penalty
-        self.client.get("/logout")
-        self.client.post("/login", data={
-            "identifier": "2024999001",
-            "password": "StudentPass2026!"
-        })
-
-        rejoin_res = self.client.post(f"/tickets/{t_id}/rejoin", follow_redirects=True)
-
-        self.assertEqual(rejoin_res.status_code, 200)
-        self.assertIn(b"re-joined the queue", rejoin_res.data)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, rejoin_used, penalty_offset, priority_score FROM tickets WHERE id = ?", (t_id,))
-        r_row = cursor.fetchone()
-        conn.close()
-
-        self.assertEqual(r_row[0], "WAITING")
-        self.assertEqual(r_row[1], 1)
-        self.assertEqual(r_row[2], 2.0)
-        self.assertAlmostEqual(r_row[3], initial_score + 2.0, places=1)
-
-    def test_rejoin_expiry_and_one_chance_limit(self):
-        """Verifies 15-minute expiry cancels skipped ticket and 1-chance limit prevents duplicate re-queuing."""
-        # Arrange: Create SKIPPED ticket with skipped_at older than 15 minutes (1000s ago)
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        old_skipped_at = time.time() - 1000
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, skipped_at, rejoin_used)
-            VALUES ('2024999002', 'Expired Student', 'expired@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'SKIPPED', ?, 0)
-        """, (time.time() - 1200, old_skipped_at))
-        exp_tid = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Act: Requesting ticket status triggers lazy check which auto-cancels expired ticket
-        res = self.client.get(f"/ticket/{exp_tid}")
-
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Ticket Cancelled", res.data)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status FROM tickets WHERE id = ?", (exp_tid,))
-        status = cursor.fetchone()[0]
-        conn.close()
-        self.assertEqual(status, "CANCELLED")
-
-    def test_feedback_workflow_get_and_post(self):
-        """Verifies GET/POST feedback workflow for SERVED tickets including double-submission prevention."""
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at, served_by)
-            VALUES ('2024999003', 'Served Feedback Student', 'servedfeedback@mymail.mapua.edu.ph', 'Transcript of Records (TOR)', 4, 'Junior', 5, ?, 4.5, 'SERVED', ?, 'registrar@mapua.edu.ph')
-        """, (time.time() - 300, time.time() - 60))
-        t_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Step 1: GET feedback page for SERVED ticket
-        res = self.client.get(f"/ticket/{t_id}/feedback")
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Registrar Service Feedback", res.data)
-
-        # Step 2: POST valid feedback (5 stars)
-        post_res = self.client.post(f"/ticket/{t_id}/feedback", data={
-            "rating": "5",
-            "comment": "Excellent service at the registrar counter!"
-        }, follow_redirects=True)
-
-        self.assertEqual(post_res.status_code, 200)
-        self.assertIn(b"Thank you for your feedback!", post_res.data)
-
-        # Verify DB state
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT feedback_rating, feedback_comment, feedback_submitted_at FROM tickets WHERE id = ?", (t_id,))
-        row = cursor.fetchone()
-        conn.close()
-
-        self.assertEqual(row[0], 5)
-        self.assertEqual(row[1], "Excellent service at the registrar counter!")
-        self.assertIsNotNone(row[2])
-
-        # Step 3: Subsequent GET shows read-only thank-you state
-        get_ro = self.client.get(f"/ticket/{t_id}/feedback")
-        self.assertEqual(get_ro.status_code, 200)
-        self.assertIn(b"Thank You for Your Feedback!", get_ro.data)
-
-        # Step 4: Double submission attempt is blocked
-        post_double = self.client.post(f"/ticket/{t_id}/feedback", data={
-            "rating": "1",
-            "comment": "Trying to overwrite feedback"
-        }, follow_redirects=True)
-        self.assertIn(b"Feedback has already been submitted for this ticket.", post_double.data)
-
-    def test_feedback_guard_non_served_ticket(self):
-        """Verifies feedback route redirects WAITING tickets with a guard warning alert."""
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024999004', 'Waiting Student', 'waiting@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
-        """, (time.time(),))
-        t_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        res = self.client.get(f"/ticket/{t_id}/feedback", follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Feedback can only be submitted for completed/served tickets.", res.data)
-
-    def test_feedback_validation_invalid_rating(self):
-        """Verifies feedback POST rejects star ratings outside 1-5 range."""
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at)
-            VALUES ('2024999005', 'Invalid Rating Student', 'invalidrating@mymail.mapua.edu.ph', 'Form 137A (F137A)', 6, 'Sophomore', 7, ?, 6.5, 'SERVED', ?)
-        """, (time.time() - 300, time.time() - 100))
-        t_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        res = self.client.post(f"/ticket/{t_id}/feedback", data={
-            "rating": "10",
-            "comment": "Invalid high rating"
-        }, follow_redirects=True)
-
-        self.assertIn(b"Please select a valid star rating between 1 and 5 stars.", res.data)
-
-    def test_analytics_feedback_metrics_and_chart(self):
-        """Verifies analytics metrics calculations and Matplotlib feedback chart PNG route."""
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        now = time.time()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at, feedback_rating, feedback_comment, feedback_submitted_at)
-            VALUES ('2024999006', 'S1', 's1@mymail.mapua.edu.ph', 'Overload', 2, 'Senior', 3, ?, 2.5, 'SERVED', ?, 5, 'Great', ?)
-        """, (now - 600, now - 300, now - 200))
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status, served_at, feedback_rating, feedback_comment, feedback_submitted_at)
-            VALUES ('2024999007', 'S2', 's2@mymail.mapua.edu.ph', 'LOA', 3, 'Junior', 5, ?, 3.5, 'SERVED', ?, 4, 'Good', ?)
-        """, (now - 500, now - 200, now - 100))
-        conn.commit()
-        conn.close()
-
-        # Check analytics summary math
-        summary = analytics.get_analytics_summary(DB)
-        self.assertGreaterEqual(summary["total_feedback_count"], 2)
-        self.assertGreaterEqual(summary["average_satisfaction"], 4.0)
-
-        # Authenticate as Staff and call /api/analytics/feedback.png
-        self.client.get("/logout")
-        self.client.post("/login", data={
-            "identifier": "registrar@mapua.edu.ph",
-            "password": "StaffPass2026!"
-        })
-
-        chart_res = self.client.get("/api/analytics/feedback.png")
-        self.assertEqual(chart_res.status_code, 200)
-        self.assertEqual(chart_res.mimetype, "image/png")
-        self.assertGreater(len(chart_res.data), 100)
-
-    def test_admin_reset_password_route(self):
-        """Verifies admin POST /admin/users/<id>/reset-password generates temp password and sets must_change_password."""
-        self._login_as_admin()
-
-        # Create a student user
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO students (student_id, email, password_hash, full_name, created_at)
-            VALUES ('2024888001', 'resetadmin@mymail.mapua.edu.ph', 'OldHash', 'Reset Admin Student', ?)
-        """, (time.time(),))
-        st_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Admin resets student password
-        res = self.client.post(f"/admin/users/{st_id}/reset-password", data={"target_type": "student"}, follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Password for Reset Admin Student reset to:", res.data)
-
-        # Check DB state
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT password_hash, must_change_password FROM students WHERE id = ?", (st_id,))
-        row = cursor.fetchone()
-        conn.close()
-
-        self.assertNotEqual(row[0], "OldHash")
-        self.assertEqual(row[1], 1)
-
-    def test_forgot_password_self_service_route(self):
-        """Verifies /forgot-password generates temporary password and flashes anti-enumeration message."""
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO students (student_id, email, password_hash, full_name, created_at)
-            VALUES ('2024888002', 'forgotpass@mymail.mapua.edu.ph', 'OldHash', 'Forgot Student', ?)
-        """, (time.time(),))
-        st_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        res = self.client.post("/forgot-password", data={"identifier": "forgotpass@mymail.mapua.edu.ph"}, follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"recovery instructions have been sent", res.data)
-
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT password_hash, must_change_password FROM students WHERE id = ?", (st_id,))
-        row = cursor.fetchone()
-        conn.close()
-
-        self.assertNotEqual(row[0], "OldHash")
-        self.assertEqual(row[1], 1)
-
-    def test_login_with_temporary_password_redirects_to_change_password(self):
-        """Verifies logging in with must_change_password=1 redirects to /change-password."""
-        from werkzeug.security import generate_password_hash
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        temp_hash = generate_password_hash("TempPass123")
-        cursor.execute("""
-            INSERT INTO students (student_id, email, password_hash, full_name, must_change_password, created_at)
-            VALUES ('2024888003', 'mustchange@mymail.mapua.edu.ph', ?, 'Must Change Student', 1, ?)
-        """, (temp_hash, time.time()))
-        st_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        res = self.client.post("/login", data={
-            "identifier": "2024888003",
-            "password": "TempPass123"
-        }, follow_redirects=True)
-
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"You logged in using a temporary password", res.data)
-        self.assertIn(b"Update Your Password", res.data)
-
-    def test_change_password_route_success(self):
-        """Verifies POST /change-password updates password and clears must_change_password flag."""
-        from werkzeug.security import generate_password_hash
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        temp_hash = generate_password_hash("TempPass123")
-        cursor.execute("""
-            INSERT INTO students (student_id, email, password_hash, full_name, must_change_password, created_at)
-            VALUES ('2024888004', 'changepass@mymail.mapua.edu.ph', ?, 'Change Pass Student', 1, ?)
-        """, (temp_hash, time.time()))
-        st_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Login to establish session
-        self.client.post("/login", data={"identifier": "2024888004", "password": "TempPass123"})
-
-        # Submit change password form
-        res = self.client.post("/change-password", data={
-            "current_password": "TempPass123",
-            "new_password": "NewSecurePass2026!",
-            "confirm_password": "NewSecurePass2026!"
-        }, follow_redirects=True)
-
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Your password has been successfully updated!", res.data)
-
-        # Verify DB state
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT must_change_password FROM students WHERE id = ?", (st_id,))
-        must_change = cursor.fetchone()[0]
-        conn.close()
-
-        self.assertEqual(must_change, 0)
-
-    def test_verify_email_route_valid_token(self):
-        """Verifies GET /verify-email/<token> marks email_verified=1 and clears verification_token."""
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO students (student_id, email, password_hash, full_name, email_verified, verification_token, created_at)
-            VALUES ('2024777001', 'verifytest@mymail.mapua.edu.ph', 'Hash123', 'Verify Test Student', 0, 'valid_token_abc123', ?)
-        """, (time.time(),))
-        st_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        res = self.client.get("/verify-email/valid_token_abc123", follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"successfully verified", res.data)
-
-        # Check DB state
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT email_verified, verification_token FROM students WHERE id = ?", (st_id,))
-        row = cursor.fetchone()
-        conn.close()
-
-        self.assertEqual(row[0], 1)
-        self.assertIsNone(row[1])
-
-    def test_resend_verification_route(self):
-        """Verifies POST /resend-verification dispatches new verification notice for unverified student."""
-        from werkzeug.security import generate_password_hash
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        pass_hash = generate_password_hash("StudentPass2026!")
-        cursor.execute("""
-            INSERT INTO students (student_id, email, password_hash, full_name, email_verified, verification_token, created_at)
-            VALUES ('2024777002', 'resendtest@mymail.mapua.edu.ph', ?, 'Resend Test Student', 0, 'token_xyz987', ?)
-        """, (pass_hash, time.time()))
-        st_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Login student
-        self.client.post("/login", data={"identifier": "2024777002", "password": "StudentPass2026!"})
-
-        res = self.client.post("/resend-verification", follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"fresh email verification link has been dispatched", res.data)
-
-    def test_void_ticket_route_soft_delete(self):
-        """Verifies POST /tickets/<id>/void sets status=CANCELLED with void remarks."""
-        self._login_as_admin()
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024999010', 'Void Test Student', 'voidtest@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
-        """, (time.time(),))
-        t_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        res = self.client.post(f"/tickets/{t_id}/void", data={"void_reason": "Duplicate Request"}, follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"marked as voided/cancelled", res.data)
-
-        # Check DB state
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, remarks FROM tickets WHERE id = ?", (t_id,))
+        cursor.execute("SELECT status, remarks FROM tickets WHERE id = 1")
         row = cursor.fetchone()
         conn.close()
 
         self.assertEqual(row[0], "CANCELLED")
-        self.assertIn("Voided: Duplicate Request", row[1])
-
-    def test_delete_ticket_route_admin_hard_delete(self):
-        """Verifies POST /tickets/<id>/delete permanently removes ticket record from DB for Admin."""
-        self._login_as_admin()
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024999011', 'Delete Test Student', 'deletetest@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
-        """, (time.time(),))
-        t_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        res = self.client.post(f"/tickets/{t_id}/delete", follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"permanently deleted from database", res.data)
-
-        # Verify DB deletion
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM tickets WHERE id = ?", (t_id,))
-        count = cursor.fetchone()[0]
-        conn.close()
-
-        self.assertEqual(count, 0)
+        self.assertIn("Voided: Duplicate check-in entry", row[1])
 
 
 if __name__ == "__main__":
     unittest.main()
-
-

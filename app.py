@@ -1685,7 +1685,42 @@ def admin_reset_queue():
     conn.close()
     return redirect(url_for("dashboard"))
 
+def init_db():
+    """Initializes schema and seeds default Admin & Staff accounts safely."""
+    conn = sqlite3.connect(Config.DB_NAME)
+    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+    with open(schema_path, "r") as f:
+        conn.executescript(f.read())
+    conn.commit()
+
+    cursor = conn.cursor()
+    # Seed default Admin account if missing
+    cursor.execute("SELECT id FROM staff_users WHERE email = 'admin@mapua.edu.ph' OR employee_id = 'admin'")
+    if not cursor.fetchone():
+        admin_pass_hash = generate_password_hash("MapuaAdmin2026!")
+        cursor.execute("""
+            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+            VALUES ('admin', 'admin@mapua.edu.ph', ?, 'Lead Registrar Admin', 'admin', 'Registrar Administration', '/static/uploads/avatars/default.png', ?)
+        """, (admin_pass_hash, time.time()))
+        conn.commit()
+
+    # Seed default Staff account if missing
+    cursor.execute("SELECT id FROM staff_users WHERE email = 'registrar@mapua.edu.ph' OR employee_id = 'registrar'")
+    if not cursor.fetchone():
+        staff_pass_hash = generate_password_hash("StaffPass2026!")
+        cursor.execute("""
+            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+            VALUES ('registrar', 'registrar@mapua.edu.ph', ?, 'Registrar Staff Officer', 'staff', 'Registrar Counter', '/static/uploads/avatars/default.png', ?)
+        """, (staff_pass_hash, time.time()))
+        conn.commit()
+
+    conn.close()
+
+
+# Auto-initialize database tables on WSGI import
+with app.app_context():
+    init_db()
+
 
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)
