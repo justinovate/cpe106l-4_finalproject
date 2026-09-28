@@ -20,6 +20,7 @@ TEST_DB_PATH = os.path.join(PROJECT_ROOT, "tests", "test_students_queue.db")
 os.environ["DB_NAME"] = TEST_DB_PATH
 
 # 3. Now import Config and app safely
+from werkzeug.security import generate_password_hash
 from config import Config
 from app import app, init_db
 
@@ -54,10 +55,24 @@ class MapuaQIsolatedAppTestCase(unittest.TestCase):
         """Verify tests run against TEST_DB_PATH and dev DB is untouched."""
         self.assertEqual(Config.DB_NAME, TEST_DB_PATH)
         self.assertTrue(os.path.exists(TEST_DB_PATH))
-        self.assertFalse(TEST_DB_PATH.endswith("students_queue.db"))
+        self.assertNotEqual(os.path.basename(TEST_DB_PATH), "students_queue.db")
 
     def test_kiosk_checkin_flow(self):
-        """Test public student check-in route."""
+        """Test student check-in route when authenticated."""
+        conn = sqlite3.connect(TEST_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO students (student_id, email, password_hash, full_name, program_dept, created_at, email_verified)
+            VALUES ('2024180099', 'testisolated@mymail.mapua.edu.ph', ?, 'Test Isolated Student', 'BS CS', ?, 1)
+        """, (generate_password_hash("StudentPass123!"), time.time()))
+        conn.commit()
+        conn.close()
+
+        self.client.post("/login", data={
+            "identifier": "2024180099",
+            "password": "StudentPass123!"
+        })
+
         response = self.client.post("/checkin", data={
             "student_id": "2024180099",
             "full_name": "Test Isolated Student",
@@ -82,7 +97,7 @@ class MapuaQIsolatedAppTestCase(unittest.TestCase):
     def test_staff_login_and_dashboard_access(self):
         """Test staff authentication and dashboard authorization guard."""
         login_resp = self.client.post("/login", data={
-            "email_or_id": "registrar@mapua.edu.ph",
+            "identifier": "registrar@mapua.edu.ph",
             "password": "StaffPass2026!"
         }, follow_redirects=True)
         self.assertEqual(login_resp.status_code, 200)
@@ -92,28 +107,30 @@ class MapuaQIsolatedAppTestCase(unittest.TestCase):
 
     def test_ticket_soft_void_endpoint(self):
         """Test soft-delete / void route for staff."""
-        # Create ticket
-        self.client.post("/checkin", data={
-            "student_id": "2024180088",
-            "full_name": "Void Student",
-            "email": "void@mymail.mapua.edu.ph",
-            "request_type": "General Inquiry",
-            "grade_level": "Freshman"
-        })
+        conn = sqlite3.connect(TEST_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+            VALUES ('2024180088', 'Void Student', 'void@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
+        """, (time.time(),))
+        t_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
 
         # Login staff
-        self.client.post("/login", data={"email_or_id": "registrar@mapua.edu.ph", "password": "StaffPass2026!"})
+        self.client.post("/login", data={"identifier": "registrar@mapua.edu.ph", "password": "StaffPass2026!"})
 
-        # Void ticket #1
-        void_resp = self.client.post("/tickets/1/void", data={"void_reason": "Duplicate check-in entry"}, follow_redirects=True)
+        # Void ticket
+        void_resp = self.client.post(f"/tickets/{t_id}/void", data={"void_reason": "Duplicate check-in entry"}, follow_redirects=True)
         self.assertEqual(void_resp.status_code, 200)
 
         conn = sqlite3.connect(TEST_DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT status, remarks FROM tickets WHERE id = 1")
+        cursor.execute("SELECT status, remarks FROM tickets WHERE id = ?", (t_id,))
         row = cursor.fetchone()
         conn.close()
 
+        self.assertIsNotNone(row)
         self.assertEqual(row[0], "CANCELLED")
         self.assertIn("Voided: Duplicate check-in entry", row[1])
 

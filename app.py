@@ -391,7 +391,7 @@ def student_dashboard():
 def login():
     """Unified Authentication View accepting Mapúa Email, Employee ID, or Student ID across separate tables."""
     if request.method == "POST":
-        identifier = request.form.get("identifier", "").strip()
+        identifier = (request.form.get("identifier") or request.form.get("email_or_id") or "").strip()
         password = request.form.get("password", "")
 
         conn = sqlite3.connect(DB)
