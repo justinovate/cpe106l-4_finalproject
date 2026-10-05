@@ -137,11 +137,16 @@ def init_db():
         # Migration check: if legacy 'users' table exists, migrate staff/admin records to staff_users and drop 'users'
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
         if cursor.fetchone():
-            cursor.execute("""
+            cursor.execute("PRAGMA table_info(users)")
+            u_cols = [row[1] for row in cursor.fetchall()]
+            prog_col = "program_dept" if "program_dept" in u_cols else "NULL"
+            id_col = "student_id" if "student_id" in u_cols else "NULL"
+            cursor.execute(f"""
                 INSERT OR IGNORE INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
-                SELECT COALESCE(student_id, 'EMP-' || id), email, password_hash, full_name, role, program_dept, avatar_url, created_at
+                SELECT COALESCE({id_col}, 'EMP-' || id), email, password_hash, full_name, role, {prog_col}, avatar_url, created_at
                 FROM users WHERE role IN ('staff', 'admin')
             """)
+            cursor.execute("DROP TABLE users")
 
         # Migration check: ensure columns exist in staff_users
         cursor.execute("PRAGMA table_info(staff_users)")
