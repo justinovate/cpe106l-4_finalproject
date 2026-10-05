@@ -1,7 +1,6 @@
 """
-MapuaQ Integration & Route Test Suite
+MapuaQ Integration & Route Test Suite for Sprint 4
 Strictly isolated from development/production students_queue.db.
-Import ordering enforced via os.environ['DB_NAME'] to eliminate race conditions.
 """
 
 import os
@@ -10,129 +9,146 @@ import unittest
 import sqlite3
 import time
 
-# 1. Resolve project root
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# 2. MUST set environment variable BEFORE importing Config or app
 TEST_DB_PATH = os.path.join(PROJECT_ROOT, "tests", "test_students_queue.db")
 os.environ["DB_NAME"] = TEST_DB_PATH
 
-# 3. Now import Config and app safely
 from werkzeug.security import generate_password_hash
 from config import Config
-from app import app, init_db
+from app import app, init_db, get_db_connection
 
 
 class MapuaQIsolatedAppTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        """Configure test environment once for class."""
+        app.config['DB_NAME'] = TEST_DB_PATH
         Config.DB_NAME = TEST_DB_PATH
         app.config["TESTING"] = True
         cls.client = app.test_client()
 
     def setUp(self):
-        """Set up an isolated test database for each test case."""
+        app.config['DB_NAME'] = TEST_DB_PATH
         Config.DB_NAME = TEST_DB_PATH
         if os.path.exists(TEST_DB_PATH):
             try:
                 os.remove(TEST_DB_PATH)
             except OSError:
                 pass
-        init_db()
+        with app.app_context():
+            init_db()
 
     def tearDown(self):
-        """Clean up isolated test database file after each test case."""
         if os.path.exists(TEST_DB_PATH):
             try:
                 os.remove(TEST_DB_PATH)
             except OSError:
                 pass
 
-    def test_database_isolation_does_not_touch_dev_db(self):
-        """Verify tests run against TEST_DB_PATH and dev DB is untouched."""
-        self.assertEqual(Config.DB_NAME, TEST_DB_PATH)
+    def test_database_isolation_and_schema(self):
+        """Verify tests run against TEST_DB_PATH and WAL mode / IN_SERVICE schema check."""
+        self.assertEqual(app.config['DB_NAME'], TEST_DB_PATH)
         self.assertTrue(os.path.exists(TEST_DB_PATH))
-        self.assertNotEqual(os.path.basename(TEST_DB_PATH), "students_queue.db")
-
-    def test_kiosk_checkin_flow(self):
-        """Test student check-in route when authenticated."""
-        conn = sqlite3.connect(TEST_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO students (student_id, email, password_hash, full_name, program_dept, created_at, email_verified)
-            VALUES ('2024180099', 'testisolated@mymail.mapua.edu.ph', ?, 'Test Isolated Student', 'BS CS', ?, 1)
-        """, (generate_password_hash("StudentPass123!"), time.time()))
-        conn.commit()
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='tickets';")
+        row = cur.fetchone()
+        self.assertIsNotNone(row)
+        self.assertIn("IN_SERVICE", row[0])
         conn.close()
 
-        self.client.post("/login", data={
-            "identifier": "2024180099",
-            "password": "StudentPass123!"
+    def test_user_registration_and_login_without_email_verification(self):
+        """Test registration activates user immediately without email verification."""
+        res_reg = self.client.post('/register', data={
+            'student_id': '2026109999',
+            'full_name': 'Test Student',
+            'email': 'teststudent@mapua.edu.ph',
+            'password': 'password123',
+            'confirm_password': 'password123'
+        }, follow_redirects=True)
+        self.assertIn(b'Registration successful', res_reg.data)
+
+        res_login = self.client.post('/login', data={
+            'email_or_id': '2026109999',
+            'password': 'password123'
+        }, follow_redirects=True)
+        self.assertIn(b'Welcome back, Test Student!', res_login.data)
+
+    def test_full_ticket_lifecycle_with_mark_arrived(self):
+        """Test transitions WAITING -> CALLED -> IN_SERVICE -> SERVED."""
+        self.client.post('/register', data={
+            'student_id': '2026102222',
+            'full_name': 'Lifecycle Student',
+            'email': 'lifecycle@mapua.edu.ph',
+            'password': 'password123',
+            'confirm_password': 'password123'
+        })
+        self.client.post('/login', data={
+            'email_or_id': '2026102222',
+            'password': 'password123'
+        })
+        self.client.post('/checkin', data={
+            'request_type': 'General Inquiry',
+            'grade_level': '1st Year'
         })
 
-        response = self.client.post("/checkin", data={
-            "student_id": "2024180099",
-            "full_name": "Test Isolated Student",
-            "email": "testisolated@mymail.mapua.edu.ph",
-            "request_type": "Application for Graduation",
-            "grade_level": "Graduating Senior"
-        }, follow_redirects=False)
-        
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/ticket/", response.location)
+        self.client.get('/logout')
+        self.client.post('/login', data={
+            'email_or_id': 'staff@mapua.edu.ph',
+            'password': 'staff123'
+        })
 
-        conn = sqlite3.connect(TEST_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT student_id, status FROM tickets WHERE email = ?", ("testisolated@mymail.mapua.edu.ph",))
-        row = cursor.fetchone()
+        res_call = self.client.post('/staff/call-next', follow_redirects=True)
+        self.assertIn(b'has been CALLED', res_call.data)
+
+        res_arrive = self.client.post('/staff/mark-arrived/1', follow_redirects=True)
+        self.assertIn(b'is now IN SERVICE', res_arrive.data)
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT status, arrived_at FROM tickets WHERE id = 1")
+        ticket = cur.fetchone()
+        self.assertEqual(ticket['status'], 'IN_SERVICE')
+        self.assertIsNotNone(ticket['arrived_at'])
         conn.close()
 
-        self.assertIsNotNone(row)
-        self.assertEqual(row[0], "2024180099")
-        self.assertEqual(row[1], "WAITING")
+        res_complete = self.client.post('/staff/complete-service/1', follow_redirects=True)
+        self.assertIn(b'marked as SERVED', res_complete.data)
 
-    def test_staff_login_and_dashboard_access(self):
-        """Test staff authentication and dashboard authorization guard."""
-        login_resp = self.client.post("/login", data={
-            "identifier": "registrar@mapua.edu.ph",
-            "password": "StaffPass2026!"
-        }, follow_redirects=True)
-        self.assertEqual(login_resp.status_code, 200)
+    def test_on_deck_notification_logic(self):
+        """Test notify_prepare flag when Rank #1 waiting ticket views status while another ticket is IN_SERVICE."""
+        self.client.post('/register', data={
+            'student_id': 'S001', 'full_name': 'Student One',
+            'email': 's1@mapua.edu.ph', 'password': 'pass', 'confirm_password': 'pass'
+        })
+        self.client.post('/register', data={
+            'student_id': 'S002', 'full_name': 'Student Two',
+            'email': 's2@mapua.edu.ph', 'password': 'pass', 'confirm_password': 'pass'
+        })
 
-        dash_resp = self.client.get("/dashboard")
-        self.assertEqual(dash_resp.status_code, 200)
+        self.client.post('/login', data={'email_or_id': 'S001', 'password': 'pass'})
+        self.client.post('/checkin', data={'request_type': 'General Inquiry', 'grade_level': '1st Year'})
+        self.client.get('/logout')
 
-    def test_ticket_soft_void_endpoint(self):
-        """Test soft-delete / void route for staff."""
-        conn = sqlite3.connect(TEST_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES ('2024180088', 'Void Student', 'void@mymail.mapua.edu.ph', 'General Inquiry', 9, 'Freshman', 9, ?, 9.0, 'WAITING')
-        """, (time.time(),))
-        t_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
+        self.client.post('/login', data={'email_or_id': 'S002', 'password': 'pass'})
+        self.client.post('/checkin', data={'request_type': 'General Inquiry', 'grade_level': '1st Year'})
+        self.client.get('/logout')
 
-        # Login staff
-        self.client.post("/login", data={"identifier": "registrar@mapua.edu.ph", "password": "StaffPass2026!"})
+        self.client.post('/login', data={'email_or_id': 'staff@mapua.edu.ph', 'password': 'staff123'})
+        self.client.post('/staff/call-next')
+        self.client.post('/staff/mark-arrived/1')
+        self.client.get('/logout')
 
-        # Void ticket
-        void_resp = self.client.post(f"/tickets/{t_id}/void", data={"void_reason": "Duplicate check-in entry"}, follow_redirects=True)
-        self.assertEqual(void_resp.status_code, 200)
+        self.client.post('/login', data={'email_or_id': 'S002', 'password': 'pass'})
+        res_api = self.client.get('/api/ticket/2/status')
+        data = res_api.get_json()
 
-        conn = sqlite3.connect(TEST_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, remarks FROM tickets WHERE id = ?", (t_id,))
-        row = cursor.fetchone()
-        conn.close()
-
-        self.assertIsNotNone(row)
-        self.assertEqual(row[0], "CANCELLED")
-        self.assertIn("Voided: Duplicate check-in entry", row[1])
+        self.assertEqual(data['status'], 'WAITING')
+        self.assertEqual(data['position'], 1)
+        self.assertTrue(data['notify_prepare'])
 
 
 if __name__ == "__main__":

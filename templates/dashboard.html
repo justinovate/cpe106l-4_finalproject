@@ -1,609 +1,230 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MapuaQ - Staff Dashboard</title>
-    <link rel="icon" type="image/svg+xml" href="/static/images/logo_icon.svg">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .bg-mapua-cardinal { background-color: #800000; }
-        .text-mapua-cardinal { color: #800000; }
-        .border-mapua-cardinal { border-color: #800000 !important; }
-        .avatar-sm { width: 34px; height: 34px; object-fit: cover; }
-    </style>
-</head>
-<body class="bg-light">
+{% extends 'base.html' %}
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm mb-4">
-    <div class="container">
-        <a class="navbar-brand fw-bold d-flex align-items-center" href="/dashboard">
-            <img src="/static/images/logo_icon_white.svg" alt="MapúaQ Logo" style="height: 32px;" class="me-2">
-            <span>MapúaQ</span>
-            <span class="badge bg-warning text-dark fs-6 ms-2">Registrar Employee Portal</span>
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <div class="navbar-nav me-auto">
-                <a class="nav-link active fw-bold" href="/dashboard">Queue Monitor</a>
-                <a class="nav-link fw-bold" href="/analytics">Analytics</a>
-                {% if user and user.role == 'admin' %}
-                <a class="nav-link fw-bold text-warning" href="/admin/users">Manage Staff Accounts</a>
-                {% endif %}
-                <a class="nav-link fw-bold" href="/profile">My Profile</a>
-            </div>
-            <div class="navbar-nav align-items-center">
-                <span class="navbar-text text-light me-3 d-flex align-items-center">
-                    <img src="{{ user.avatar_url or '/static/uploads/avatars/default.png' }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white">
-                    <strong>{{ user.full_name }}</strong>
-                    <span class="badge bg-light text-dark text-capitalize ms-2">{{ user.role }}</span>
-                </span>
-                <a href="/logout" class="btn btn-outline-light btn-sm fw-bold">Logout</a>
-            </div>
-        </div>
+{% block title %}Staff Queue Dashboard - Map&uacute;aQ{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-7">
+        <h2 class="fw-bold text-dark">Registrar Counter Management</h2>
+        <p class="text-muted mb-0">Staff Dashboard for Live Queue Lifecycle &amp; Ticket Processing</p>
     </div>
-</nav>
-
-<div class="container pb-5">
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-          </div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <!-- Counter Status Banner: Now Serving at Counter vs Ready to Call -->
-    {% if called_ticket %}
-    <div class="card border-success mb-4 shadow-sm">
-        <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center py-2">
-            <span>NOW SERVING AT COUNTER</span>
-            <div class="d-flex align-items-center gap-2">
-                <span id="dashboardGraceAlertBadge" class="badge bg-danger pulse-badge d-none">⚠️ Grace Period Expired (Student No-Show)</span>
-                <span class="badge bg-light text-success fw-bold">CALLED — Active Student at Counter</span>
-            </div>
-        </div>
-        <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center p-4 gap-3">
-            <div>
-                <h3 class="mb-1 fw-bold text-success">
-                    #{{ called_ticket.id }} — {{ called_ticket.full_name }}
-                    <span class="fs-6 text-muted">({{ called_ticket.student_id }})</span>
-                </h3>
-                <p class="mb-2 text-dark fs-5"><strong>Service Request:</strong> {{ called_ticket.request_type }} <span class="badge bg-secondary fs-6 ms-2">{{ called_ticket.grade_level }}</span></p>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="badge bg-info text-dark fs-6">
-                        ⏱️ Elapsed Call Clock: <span id="dashboardElapsedClock">00:00</span>
-                    </span>
-                    <span class="badge bg-warning text-dark fs-6">
-                        ⏳ Grace Window Remaining: <span id="dashboardGraceClock">05:00</span>
-                    </span>
-                    <span class="badge bg-dark fs-6">Counter Staff: {{ called_ticket.served_by or user.full_name }}</span>
-                </div>
-            </div>
-            <div class="d-flex gap-2 align-self-start align-self-md-center">
-                <button type="button" class="btn btn-success btn-lg px-4 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#serveModal{{ called_ticket.id }}">
-                    ✓ Complete &amp; Mark Served
-                </button>
-                <button type="button" class="btn btn-outline-danger btn-lg px-4 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#skipModal{{ called_ticket.id }}">
-                    ⚠️ Skip (No-Show)
-                </button>
-                <button type="button" class="btn btn-outline-dark btn-lg px-3 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#voidCalledModal{{ called_ticket.id }}">
-                    🚫 Void
-                </button>
-            </div>
-        </div>
+    <div class="col-md-5 text-md-end mt-3 mt-md-0">
+        <form method="POST" action="{{ url_for('call_next') }}" class="d-inline">
+            <button type="submit" class="btn btn-mapua-primary btn-lg shadow-sm" {% if not waiting_tickets %}disabled{% endif %}>
+                Call Next Ticket
+            </button>
+        </form>
     </div>
-
-    <!-- Serve Ticket Modal -->
-    <div class="modal fade" id="serveModal{{ called_ticket.id }}" tabindex="-1" aria-labelledby="serveModalLabel{{ called_ticket.id }}" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title fw-bold" id="serveModalLabel{{ called_ticket.id }}">Complete Service — Ticket #{{ called_ticket.id }}</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form method="POST" action="/tickets/{{ called_ticket.id }}/serve">
-                    <div class="modal-body">
-                        <p class="mb-2"><strong>Student:</strong> {{ called_ticket.full_name }} ({{ called_ticket.student_id }})</p>
-                        <p class="mb-3"><strong>Service Request:</strong> {{ called_ticket.request_type }}</p>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Transaction Remarks / Servicing Notes (Optional)</label>
-                            <textarea name="remarks" class="form-control" rows="3" placeholder="e.g., Issued 1st copy of Official TOR. Student paid balance at Cashier."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success fw-bold">Confirm Mark Served</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Skip Ticket Modal -->
-    <div class="modal fade" id="skipModal{{ called_ticket.id }}" tabindex="-1" aria-labelledby="skipModalLabel{{ called_ticket.id }}" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title fw-bold" id="skipModalLabel{{ called_ticket.id }}">Mark Ticket #{{ called_ticket.id }} as Skipped / No-Show</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form method="POST" action="/tickets/{{ called_ticket.id }}/skip">
-                    <div class="modal-body">
-                        <p class="mb-2"><strong>Student:</strong> {{ called_ticket.full_name }} ({{ called_ticket.student_id }})</p>
-                        <p class="mb-3 text-muted">Skipping this ticket will free the counter so the next student in queue can be called.</p>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Reason for Skipping</label>
-                            <input type="text" name="skip_reason" class="form-control" value="No-show during 5-minute call window" required>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-warning fw-bold">Confirm Skip (No-Show)</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Void Active Called Ticket Modal -->
-    <div class="modal fade" id="voidCalledModal{{ called_ticket.id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title fw-bold">Void Called Ticket #{{ called_ticket.id }}</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form method="POST" action="/tickets/{{ called_ticket.id }}/void">
-                    <div class="modal-body">
-                        <p class="mb-2"><strong>Student:</strong> {{ called_ticket.full_name }} ({{ called_ticket.student_id }})</p>
-                        <p class="mb-3 text-muted">Voiding will cancel this ticket and remove it from active processing.</p>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Reason for Voiding</label>
-                            <select name="void_reason" class="form-select" required>
-                                <option value="Duplicate Request">Duplicate Request</option>
-                                <option value="Invalid Student Data">Invalid Student Data</option>
-                                <option value="Testing Entry">Testing Entry</option>
-                                <option value="Student Walkout / Left Queue">Student Walkout / Left Queue</option>
-                                <option value="Other / Accidental Entry">Other / Accidental Entry</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-danger fw-bold">Confirm Void Ticket</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    {% else %}
-
-    <div class="card border-mapua-cardinal mb-4 shadow-sm">
-        <div class="card-header bg-mapua-cardinal text-white fw-bold d-flex justify-content-between align-items-center py-2">
-            <span>SERVICE COUNTER READY</span>
-            <span class="badge bg-warning text-dark">Counter Available</span>
-        </div>
-        <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center p-4 gap-3">
-            {% if top_waiting %}
-            <div>
-                <span class="badge bg-danger mb-2">NEXT IN QUEUE (MIN-HEAP ROOT)</span>
-                <h3 class="mb-1 fw-bold text-mapua-cardinal">
-                    #{{ top_waiting.ticket_id }} — {{ top_waiting.name }} <span class="fs-6 text-muted">({{ top_waiting.standing_name }})</span>
-                </h3>
-                <p class="mb-1 text-dark"><strong>Service Request:</strong> {{ top_waiting.request_name }}</p>
-                <div>
-                    <span class="badge bg-danger me-2">Priority Score: {{ top_waiting.priority_score }}</span>
-                    <span class="badge bg-info text-dark">Wait Duration: {{ top_waiting.elapsed_minutes }} mins</span>
-                </div>
-            </div>
-            <div>
-                <form method="POST" action="/tickets/{{ top_waiting.ticket_id }}/call">
-                    <button type="submit" class="btn btn-warning btn-lg px-4 py-3 fw-bold shadow">
-                        📢 Call Next Student (#{{ top_waiting.ticket_id }})
-                    </button>
-                </form>
-            </div>
-            {% else %}
-            <div class="py-2">
-                <h5 class="mb-0 text-muted fw-bold">No students currently waiting in queue.</h5>
-                <p class="small text-secondary mb-0">New check-ins will appear automatically when students submit tickets at the kiosk.</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    {% endif %}
-
-    <!-- Filter Navigation Tabs -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <ul class="nav nav-tabs fw-bold mb-0 border-bottom-0">
-            <li class="nav-item">
-                <a class="nav-link {% if filter_type == 'waiting' %}active text-mapua-cardinal border-mapua-cardinal{% else %}text-secondary{% endif %}"
-                   href="/dashboard?filter=waiting">
-                   Active Waiting Queue ({{ waiting_tickets|length }})
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if filter_type == 'served' %}active text-mapua-cardinal border-mapua-cardinal{% else %}text-secondary{% endif %}"
-                   href="/dashboard?filter=served">
-                   Servicing History
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if filter_type == 'archived' %}active text-mapua-cardinal border-mapua-cardinal{% else %}text-secondary{% endif %}"
-                   href="/dashboard?filter=archived">
-                   Archived &amp; Voided
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if filter_type == 'all' %}active text-mapua-cardinal border-mapua-cardinal{% else %}text-secondary{% endif %}"
-                   href="/dashboard?filter=all">
-                   All Ticket Records
-                </a>
-            </li>
-        </ul>
-
-        {% if user and user.role == 'admin' %}
-        <button type="button" class="btn btn-outline-danger btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#resetQueueModal">
-            Reset Queue System
-        </button>
-        {% endif %}
-    </div>
-
-    <!-- Admin Reset Queue Modal -->
-    {% if user and user.role == 'admin' %}
-    <div class="modal fade" id="resetQueueModal" tabindex="-1" aria-labelledby="resetQueueModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title fw-bold" id="resetQueueModalLabel">Reset Queue System</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form method="POST" action="/admin/reset-queue">
-                    <div class="modal-body">
-                        <p class="mb-3">Select the scope of queue data you wish to reset:</p>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="radio" name="scope" id="scopeWaiting" value="waiting" checked>
-                            <label class="form-check-label fw-bold" for="scopeWaiting">
-                                Reset Active Waiting Tickets Only
-                            </label>
-                            <div class="text-muted small">Clears all WAITING and CALLED tickets from the queue. Servicing history is preserved.</div>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="scope" id="scopeAll" value="all">
-                            <label class="form-check-label fw-bold text-danger" for="scopeAll">
-                                Purge All Tickets &amp; History
-                            </label>
-                            <div class="text-muted small">Permanently deletes all ticket records and analytics history from the database.</div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-danger fw-bold">Confirm Queue Reset</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- Filter Tab Content -->
-    {% if filter_type == 'waiting' %}
-        <h4 class="fw-bold text-secondary mb-3">Active Waiting Queue</h4>
-        <div class="table-responsive">
-            <table class="table table-bordered table-hover bg-white shadow-sm align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th style="width: 8%;">Position</th>
-                        <th style="width: 10%;">Ticket ID</th>
-                        <th>Student Name</th>
-                        <th>Academic Level</th>
-                        <th>Service Request</th>
-                        <th style="width: 12%;">Wait Time</th>
-                        <th style="width: 12%;">Priority Score</th>
-                        <th style="width: 15%;">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in waiting_tickets %}
-                    <tr {% if loop.first %}class="table-warning fw-bold"{% endif %}>
-                        <td class="text-center">{{ loop.index }}</td>
-                        <td>#{{ t.ticket_id }}</td>
-                        <td>{{ t.name }}</td>
-                        <td><span class="badge bg-secondary">{{ t.standing_name }}</span></td>
-                        <td>{{ t.request_name }}</td>
-                        <td>{{ t.elapsed_minutes }} mins</td>
-                        <td>
-                            <span class="badge bg-danger">{{ t.priority_score }}</span>
-                            {% if t.penalty_offset and t.penalty_offset > 0 %}
-                                <span class="badge bg-warning text-dark ms-1">+2.0 Penalty</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="d-flex gap-1 align-items-center">
-                                {% if called_ticket %}
-                                    <button class="btn btn-sm btn-outline-secondary" disabled title="Complete current active ticket first">Locked</button>
-                                {% else %}
-                                    <form method="POST" action="/tickets/{{ t.ticket_id }}/call" class="d-inline">
-                                        <button type="submit" class="btn btn-sm btn-warning fw-bold">Call Student</button>
-                                    </form>
-                                {% endif %}
-                                <button type="button" class="btn btn-sm btn-outline-danger fw-bold" data-bs-toggle="modal" data-bs-target="#voidModal{{ t.ticket_id }}">
-                                    Void
-                                </button>
-                            </div>
-
-                            <!-- Void Modal for waiting ticket -->
-                            <div class="modal fade text-start" id="voidModal{{ t.ticket_id }}" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content">
-                                        <div class="modal-header bg-danger text-white">
-                                            <h5 class="modal-title fw-bold">Void Ticket #{{ t.ticket_id }}</h5>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <form method="POST" action="/tickets/{{ t.ticket_id }}/void">
-                                            <div class="modal-body">
-                                                <p class="mb-2 text-dark">Are you sure you want to void active ticket <strong>#{{ t.ticket_id }} — {{ t.name }}</strong>?</p>
-                                                <div class="mb-3">
-                                                    <label class="form-label fw-bold text-dark">Select Void Reason</label>
-                                                    <select name="void_reason" class="form-select" required>
-                                                        <option value="Duplicate Request">Duplicate Request</option>
-                                                        <option value="Invalid Student Data">Invalid Student Data</option>
-                                                        <option value="Testing Entry">Testing Entry</option>
-                                                        <option value="Student Walkout / Left Queue">Student Walkout / Left Queue</option>
-                                                        <option value="Other / Accidental Entry">Other / Accidental Entry</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-danger btn-sm fw-bold">Confirm Void Ticket</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="8" class="text-center text-muted py-3">No students waiting in queue.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-    {% elif filter_type == 'served' %}
-        <h4 class="fw-bold text-secondary mb-3">Servicing Audit History</h4>
-        <div class="table-responsive">
-            <table class="table table-bordered table-hover bg-white shadow-sm align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th style="width: 8%;">Ticket ID</th>
-                        <th style="width: 11%;">Student ID</th>
-                        <th>Student Name</th>
-                        <th>Service Request</th>
-                        <th style="width: 9%;">Status</th>
-                        <th style="width: 10%;">Wait Time</th>
-                        <th style="width: 14%;">Served By Staff</th>
-                        <th>Staff Remarks / Notes</th>
-                        <th style="width: 12%;">Student Rating</th>
-                        {% if user and user.role == 'admin' %}
-                        <th style="width: 10%;">Actions</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in served_tickets %}
-                    <tr>
-                        <td>#{{ t.id }}</td>
-                        <td>{{ t.student_id }}</td>
-                        <td class="fw-bold">{{ t.full_name }}</td>
-                        <td>{{ t.request_type }}</td>
-                        <td>
-                            {% if t.status == 'SERVED' %}
-                                <span class="badge bg-success">SERVED</span>
-                            {% elif t.status == 'SKIPPED' %}
-                                <span class="badge bg-secondary">SKIPPED</span>
-                            {% else %}
-                                <span class="badge bg-dark">{{ t.status }}</span>
-                            {% endif %}
-                        </td>
-                        <td><span class="badge bg-info text-dark">{{ t.wait_duration }} mins</span></td>
-                        <td><span class="badge bg-dark">{{ t.served_by }}</span></td>
-                        <td class="small">{{ t.remarks }}</td>
-                        <td>
-                            {% if t.feedback_rating %}
-                                <span class="badge bg-warning text-dark fs-6">{{ t.feedback_rating }} ★</span>
-                                {% if t.feedback_comment %}
-                                    <small class="d-block text-muted text-truncate" style="max-width: 150px;">"{{ t.feedback_comment }}"</small>
-                                {% endif %}
-                            {% else %}
-                                <span class="text-muted small">No feedback</span>
-                            {% endif %}
-                        </td>
-                        {% if user and user.role == 'admin' %}
-                        <td>
-                            <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
-                                    🗑️ Delete
-                                </button>
-                            </form>
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="{% if user and user.role == 'admin' %}10{% else %}9{% endif %}" class="text-center text-muted py-3">No served tickets recorded.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-    {% elif filter_type == 'archived' %}
-        <h4 class="fw-bold text-secondary mb-3">Archived &amp; Voided Tickets</h4>
-        <div class="table-responsive">
-            <table class="table table-bordered table-hover bg-white shadow-sm align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th style="width: 8%;">Ticket ID</th>
-                        <th style="width: 11%;">Student ID</th>
-                        <th>Student Name</th>
-                        <th>Service Request</th>
-                        <th style="width: 12%;">Status</th>
-                        <th style="width: 14%;">Processed By</th>
-                        <th>Reason / Remarks</th>
-                        {% if user and user.role == 'admin' %}
-                        <th style="width: 10%;">Actions</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in archived_tickets %}
-                    <tr>
-                        <td>#{{ t.id }}</td>
-                        <td>{{ t.student_id }}</td>
-                        <td class="fw-bold">{{ t.full_name }}</td>
-                        <td>{{ t.request_type }}</td>
-                        <td>
-                            {% if t.status == 'CANCELLED' %}
-                                <span class="badge bg-danger">CANCELLED / VOID</span>
-                            {% elif t.status == 'INVALID' %}
-                                <span class="badge bg-dark">INVALID</span>
-                            {% elif t.status == 'SKIPPED' %}
-                                <span class="badge bg-warning text-dark">SKIPPED</span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ t.status }}</span>
-                            {% endif %}
-                        </td>
-                        <td><span class="badge bg-dark">{{ t.served_by }}</span></td>
-                        <td class="small">{{ t.remarks }}</td>
-                        {% if user and user.role == 'admin' %}
-                        <td>
-                            <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
-                                <button type="submit" class="btn btn-sm btn-danger fw-bold">
-                                    🗑️ Delete
-                                </button>
-                            </form>
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="{% if user and user.role == 'admin' %}8{% else %}7{% endif %}" class="text-center text-muted py-3">No archived or voided tickets recorded.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-    {% elif filter_type == 'all' %}
-        <h4 class="fw-bold text-secondary mb-3">All System Ticket Records</h4>
-        <div class="table-responsive">
-            <table class="table table-bordered table-hover bg-white shadow-sm align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th style="width: 8%;">Ticket ID</th>
-                        <th style="width: 11%;">Student ID</th>
-                        <th>Student Name</th>
-                        <th>Service Request</th>
-                        <th style="width: 10%;">Score</th>
-                        <th style="width: 10%;">Status</th>
-                        <th style="width: 14%;">Served By</th>
-                        <th>Staff Remarks / Notes</th>
-                        {% if user and user.role == 'admin' %}
-                        <th style="width: 10%;">Actions</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in all_tickets %}
-                    <tr>
-                        <td>#{{ t.id }}</td>
-                        <td>{{ t.student_id }}</td>
-                        <td class="fw-bold">{{ t.full_name }}</td>
-                        <td>{{ t.request_type }}</td>
-                        <td><span class="badge bg-secondary">{{ t.priority_score }}</span></td>
-                        <td>
-                            {% if t.status == 'WAITING' %}
-                                <span class="badge bg-warning text-dark">WAITING</span>
-                            {% elif t.status == 'CALLED' %}
-                                <span class="badge bg-info">CALLED</span>
-                            {% elif t.status == 'SERVED' %}
-                                <span class="badge bg-success">SERVED</span>
-                            {% elif t.status == 'SKIPPED' %}
-                                <span class="badge bg-secondary">SKIPPED</span>
-                            {% elif t.status == 'CANCELLED' %}
-                                <span class="badge bg-danger">CANCELLED / VOID</span>
-                            {% else %}
-                                <span class="badge bg-dark">{{ t.status }}</span>
-                            {% endif %}
-                        </td>
-                        <td><span class="badge bg-dark">{{ t.served_by }}</span></td>
-                        <td class="small">{{ t.remarks }}</td>
-                        {% if user and user.role == 'admin' %}
-                        <td>
-                            <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
-                                    🗑️ Delete
-                                </button>
-                            </form>
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="{% if user and user.role == 'admin' %}9{% else %}8{% endif %}" class="text-center text-muted py-3">No tickets recorded in system.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% endif %}
-
 </div>
 
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    const calledAt = Number("{{ called_ticket.called_at if called_ticket else 0 }}");
-    const graceClockEl = document.getElementById("dashboardGraceClock");
-    const elapsedClockEl = document.getElementById("dashboardElapsedClock");
-    const graceAlertBadgeEl = document.getElementById("dashboardGraceAlertBadge");
+<!-- Active Serving & Called Section -->
+<div class="row mb-4">
+    <!-- Active In-Service Ticket -->
+    <div class="col-md-6 mb-3 mb-md-0">
+        <div class="card card-institutional p-3 h-100 border-primary">
+            <div class="card-header bg-white border-0 pb-0">
+                <h5 class="fw-bold text-primary mb-0">Currently In Service (At Counter)</h5>
+            </div>
+            <div class="card-body">
+                {% if in_service_tickets %}
+                    {% for t in in_service_tickets %}
+                        <div class="p-3 bg-light rounded mb-3 border">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h3 class="fw-bold text-danger mb-1">Ticket #{{ t.id }}</h3>
+                                    <h5 class="mb-1 text-dark">{{ t.full_name }}</h5>
+                                    <p class="text-muted small mb-0">{{ t.student_id }} &bull; {{ t.request_type }}</p>
+                                    <small class="text-secondary d-block mt-1">Grade Level: {{ t.grade_level }}</small>
+                                </div>
+                                <span class="badge bg-primary fs-6">IN SERVICE</span>
+                            </div>
+                            <hr class="my-2">
+                            <form method="POST" action="{{ url_for('complete_service', ticket_id=t.id) }}">
+                                <button type="submit" class="btn btn-success w-100 fw-semibold">
+                                    Complete Service &amp; Finalize
+                                </button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <p class="mb-0">No student is currently at the counter.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 
-    if (calledAt > 0) {
-        function updateDashboardTimer() {
-            const now = Date.now() / 1000;
-            const elapsed = Math.floor(now - calledAt);
-            const remaining = Math.max(0, 300 - elapsed);
+    <!-- Called Tickets Pending Arrival -->
+    <div class="col-md-6">
+        <div class="card card-institutional p-3 h-100 border-warning">
+            <div class="card-header bg-white border-0 pb-0">
+                <h5 class="fw-bold text-warning-emphasis mb-0">Called Tickets (Awaiting Arrival)</h5>
+            </div>
+            <div class="card-body">
+                {% if called_tickets %}
+                    {% for t in called_tickets %}
+                        <div class="p-3 bg-light rounded mb-3 border">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h4 class="fw-bold text-danger mb-0">Ticket #{{ t.id }}</h4>
+                                    <strong class="text-dark">{{ t.full_name }}</strong>
+                                    <small class="text-muted d-block">{{ t.request_type }}</small>
+                                </div>
+                                <span class="badge bg-warning text-dark">CALLED</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <form method="POST" action="{{ url_for('mark_arrived', ticket_id=t.id) }}" class="flex-grow-1">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold">
+                                        Mark Arrived
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ url_for('skip_ticket', ticket_id=t.id) }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm fw-semibold">
+                                        Skip / No-Show
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <p class="mb-0">No tickets waiting for arrival.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 
-            const elapsedMins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-            const elapsedSecs = String(elapsed % 60).padStart(2, '0');
-            if (elapsedClockEl) elapsedClockEl.textContent = elapsedMins + ":" + elapsedSecs;
+<!-- Waiting Priority Queue Table -->
+<div class="card card-institutional mb-4">
+    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 text-dark">Waiting Priority Queue</h5>
+        <span class="badge bg-secondary">{{ waiting_tickets | length }} Tickets Waiting</span>
+    </div>
+    <div class="card-body p-0">
+        {% if waiting_tickets %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Rank</th>
+                            <th>Ticket ID</th>
+                            <th>Student ID</th>
+                            <th>Full Name</th>
+                            <th>Request Type</th>
+                            <th>Grade Level</th>
+                            <th>Priority Score</th>
+                            <th class="pe-3 text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in waiting_tickets %}
+                            <tr>
+                                <td class="ps-3 fw-bold">#{{ loop.index }}</td>
+                                <td class="fw-bold text-danger">#{{ t.id }}</td>
+                                <td>{{ t.student_id }}</td>
+                                <td>{{ t.full_name }}</td>
+                                <td>{{ t.request_type }}</td>
+                                <td>{{ t.grade_level }}</td>
+                                <td class="small text-muted">{{ t.priority_score | round(2) }}</td>
+                                <td class="pe-3 text-end">
+                                    {% if loop.first %}
+                                        <form method="POST" action="{{ url_for('call_next') }}" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-mapua-primary">Call This Student</button>
+                                        </form>
+                                    {% else %}
+                                        <span class="text-muted small">In Queue</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-4 text-muted">
+                <p class="mb-0">The waiting queue is currently empty.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
 
-            const graceMins = String(Math.floor(remaining / 60)).padStart(2, '0');
-            const graceSecs = String(remaining % 60).padStart(2, '0');
-            if (graceClockEl) graceClockEl.textContent = graceMins + ":" + graceSecs;
-
-            if (remaining <= 0 && graceAlertBadgeEl) {
-                graceAlertBadgeEl.classList.remove("d-none");
-            }
-        }
-        updateDashboardTimer();
-        setInterval(updateDashboardTimer, 1000);
-    }
-});
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<!-- Skipped & Completed History -->
+<div class="row">
+    <div class="col-md-6 mb-3 mb-md-0">
+        <div class="card card-institutional">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="fw-bold mb-0 text-dark">Skipped Tickets</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if skipped_tickets %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">ID</th>
+                                    <th>Student</th>
+                                    <th>Rejoin Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in skipped_tickets %}
+                                    <tr>
+                                        <td class="ps-3 fw-bold">#{{ t.id }}</td>
+                                        <td>{{ t.full_name }}</td>
+                                        <td>
+                                            {% if t.rejoin_used %}
+                                                <span class="badge bg-secondary">Rejoin Used</span>
+                                            {% else %}
+                                                <span class="badge bg-light text-dark border">Eligible to Rejoin</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-center py-3 text-muted mb-0 small">No skipped tickets.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card card-institutional">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="fw-bold mb-0 text-dark">Recently Served Tickets</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if served_tickets %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">ID</th>
+                                    <th>Student</th>
+                                    <th>Request</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in served_tickets %}
+                                    <tr>
+                                        <td class="ps-3 fw-bold">#{{ t.id }}</td>
+                                        <td>{{ t.full_name }}</td>
+                                        <td class="small">{{ t.request_type }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-center py-3 text-muted mb-0 small">No served tickets yet today.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

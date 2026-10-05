@@ -1,62 +1,43 @@
 -- MapuaQ: Mapúa University Registrar Priority Queue Schema
--- Separate tables for Student Accounts and Registrar Staff / Admin Accounts
+-- Sprint 4 Local Deployment Schema
 
-CREATE TABLE IF NOT EXISTS staff_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    employee_id TEXT UNIQUE NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    full_name TEXT NOT NULL,
-    role TEXT CHECK(role IN ('staff', 'admin')) NOT NULL DEFAULT 'staff',
-    program_dept TEXT NULL,
-    phone_number TEXT NULL,
-    avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
-    avatar_position TEXT DEFAULT 'center',
-    must_change_password INTEGER DEFAULT 0,
-    email_verified INTEGER DEFAULT 1,
-    verification_token TEXT NULL,
-    created_at REAL NOT NULL
-);
+DROP TABLE IF EXISTS tickets;
+DROP TABLE IF EXISTS users;
 
-CREATE TABLE IF NOT EXISTS students (
+CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id TEXT UNIQUE NOT NULL,
+    full_name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    full_name TEXT NOT NULL,
-    program_dept TEXT NULL,
-    phone_number TEXT NULL,
-    avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
-    avatar_position TEXT DEFAULT 'center',
-    must_change_password INTEGER DEFAULT 0,
-    email_verified INTEGER DEFAULT 0,
-    verification_token TEXT NULL,
-    created_at REAL NOT NULL
+    role TEXT CHECK(role IN ('STUDENT', 'STAFF', 'ADMIN')) NOT NULL DEFAULT 'STUDENT',
+    avatar_url TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS tickets (
+CREATE TABLE tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NULL,
+    user_id INTEGER NOT NULL,
     student_id TEXT NOT NULL,
     full_name TEXT NOT NULL,
     email TEXT NOT NULL,
     request_type TEXT NOT NULL,
-    request_weight INTEGER NOT NULL,
+    request_weight REAL NOT NULL DEFAULT 1.0,
     grade_level TEXT NOT NULL,
-    level_weight INTEGER NOT NULL,
+    level_weight REAL NOT NULL DEFAULT 1.0,
     arrival_timestamp REAL NOT NULL,
     priority_score REAL NOT NULL,
     penalty_offset REAL DEFAULT 0.0,
-    status TEXT CHECK(status IN ('WAITING', 'CALLED', 'SERVED', 'SKIPPED', 'CANCELLED', 'INVALID')) DEFAULT 'WAITING',
+    status TEXT CHECK(status IN ('WAITING', 'CALLED', 'IN_SERVICE', 'SERVED', 'SKIPPED', 'CANCELLED', 'INVALID')) DEFAULT 'WAITING',
     called_at REAL NULL,
+    arrived_at REAL NULL,
     skipped_at REAL NULL,
     served_at REAL NULL,
-    served_by TEXT NULL,
+    served_by INTEGER NULL,
     rejoin_used INTEGER DEFAULT 0,
-    remarks TEXT NULL,
-    feedback_rating INTEGER NULL CHECK(feedback_rating BETWEEN 1 AND 5),
-    feedback_comment TEXT NULL,
-    feedback_submitted_at REAL NULL,
-    FOREIGN KEY (user_id) REFERENCES students (id),
-    FOREIGN KEY (served_by) REFERENCES staff_users (email)
+    remarks TEXT,
+    feedback_rating INTEGER,
+    feedback_comment TEXT,
+    feedback_submitted_at REAL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
