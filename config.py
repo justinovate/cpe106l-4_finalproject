@@ -4,11 +4,10 @@ Enforces robust absolute path anchoring for SQLite DB and production defaults.
 """
 
 import os
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if present
+load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 

@@ -1,30 +1,49 @@
 -- MapuaQ: Mapúa University Registrar Priority Queue Schema
--- Sprint 4 Local Deployment Schema
+-- Separate tables for Student Accounts and Registrar Staff / Admin Accounts
 
-DROP TABLE IF EXISTS tickets;
-DROP TABLE IF EXISTS users;
-
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS staff_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id TEXT UNIQUE NOT NULL,
-    full_name TEXT NOT NULL,
+    employee_id TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT CHECK(role IN ('STUDENT', 'STAFF', 'ADMIN')) NOT NULL DEFAULT 'STUDENT',
-    avatar_url TEXT DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    full_name TEXT NOT NULL,
+    role TEXT CHECK(role IN ('staff', 'admin')) NOT NULL DEFAULT 'staff',
+    program_dept TEXT NULL,
+    phone_number TEXT NULL,
+    avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
+    avatar_position TEXT DEFAULT 'center',
+    must_change_password INTEGER DEFAULT 0,
+    email_verified INTEGER DEFAULT 1,
+    verification_token TEXT NULL,
+    created_at REAL NOT NULL
 );
 
-CREATE TABLE tickets (
+CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
+    student_id TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    program_dept TEXT NULL,
+    phone_number TEXT NULL,
+    avatar_url TEXT DEFAULT '/static/uploads/avatars/default.png',
+    avatar_position TEXT DEFAULT 'center',
+    must_change_password INTEGER DEFAULT 0,
+    email_verified INTEGER DEFAULT 0,
+    verification_token TEXT NULL,
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NULL,
     student_id TEXT NOT NULL,
     full_name TEXT NOT NULL,
     email TEXT NOT NULL,
     request_type TEXT NOT NULL,
-    request_weight REAL NOT NULL DEFAULT 1.0,
+    request_weight INTEGER NOT NULL,
     grade_level TEXT NOT NULL,
-    level_weight REAL NOT NULL DEFAULT 1.0,
+    level_weight INTEGER NOT NULL,
     arrival_timestamp REAL NOT NULL,
     priority_score REAL NOT NULL,
     penalty_offset REAL DEFAULT 0.0,
@@ -33,11 +52,12 @@ CREATE TABLE tickets (
     arrived_at REAL NULL,
     skipped_at REAL NULL,
     served_at REAL NULL,
-    served_by INTEGER NULL,
+    served_by TEXT NULL,
     rejoin_used INTEGER DEFAULT 0,
-    remarks TEXT,
-    feedback_rating INTEGER,
-    feedback_comment TEXT,
-    feedback_submitted_at REAL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    remarks TEXT NULL,
+    feedback_rating INTEGER NULL CHECK(feedback_rating BETWEEN 1 AND 5),
+    feedback_comment TEXT NULL,
+    feedback_submitted_at REAL NULL,
+    FOREIGN KEY (user_id) REFERENCES students (id),
+    FOREIGN KEY (served_by) REFERENCES staff_users (email)
 );

@@ -82,19 +82,16 @@
             <span class="badge bg-secondary text-capitalize px-3 py-1.5 fs-6 ms-1">{{ user_info.program_dept or 'Mapúa University' }}</span>
         </div>
 
-        <!-- Avatar Controls (Upload, Reposition, Remove) -->
+        <!-- Avatar Controls (Upload, Remove) -->
         <div class="d-flex justify-content-center gap-2 mt-3 pt-2 border-top border-light">
             <button type="button" class="btn btn-sm btn-outline-danger fw-bold" data-bs-toggle="modal" data-bs-target="#uploadAvatarModal">
-                📷 Change Photo
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" data-bs-toggle="modal" data-bs-target="#repositionAvatarModal">
-                ⚙️ Reposition Image
+                Change Photo
             </button>
             {% if user_info.avatar_url != '/static/uploads/avatars/default.png' %}
                 <form method="POST" action="/profile" class="d-inline">
                     <input type="hidden" name="action" value="remove_avatar">
                     <button type="submit" class="btn btn-sm btn-outline-dark fw-bold">
-                        🗑️ Remove Photo
+                        Remove Photo
                     </button>
                 </form>
             {% endif %}
@@ -318,37 +315,6 @@
     </div>
 </div>
 
-<!-- Modal: Reposition Avatar -->
-<div class="modal fade" id="repositionAvatarModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title fw-bold">Reposition Profile Picture</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form method="POST" action="/profile">
-                <input type="hidden" name="action" value="reposition_avatar">
-                <div class="modal-body text-center">
-                    <div class="mb-3">
-                        <img src="{{ user_info.avatar_url }}" alt="Preview" class="rounded-circle avatar-lg mb-2" style="object-position: {{ user_info.avatar_position or 'center' }};">
-                    </div>
-                    <div class="mb-3 text-start">
-                        <label class="form-label fw-bold">Select Vertical Focus Point</label>
-                        <select name="avatar_position" class="form-select" required>
-                            <option value="center" {% if user_info.avatar_position == 'center' %}selected{% endif %}>Center (Balanced)</option>
-                            <option value="top" {% if user_info.avatar_position == 'top' %}selected{% endif %}>Top (Face / Head Focus)</option>
-                            <option value="bottom" {% if user_info.avatar_position == 'bottom' %}selected{% endif %}>Bottom (Lower Focus)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-dark btn-sm fw-bold">Save Position</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
 <!-- Modal: Edit Info -->
 <div class="modal fade" id="editInfoModal" tabindex="-1" aria-hidden="true">

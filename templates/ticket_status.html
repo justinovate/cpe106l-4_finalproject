@@ -63,14 +63,31 @@
       {% endif %}
     {% endwith %}
 
+    <!-- ON-DECK ALERT CARD -->
+    {% if is_on_deck and ticket.status == 'WAITING' %}
+        <div class="alert alert-info border-info text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
+            <h3 class="fw-bold mb-1 text-info-emphasis">YOU ARE ON-DECK</h3>
+            <p class="mb-2 fs-5 fw-semibold text-dark">You are next in line (Rank #1). Please prepare to approach Counter 1 as soon as the current student finishes.</p>
+            <span class="badge bg-info text-dark fs-6 px-3 py-2">Prepare your Mapúa Student ID &amp; Documents</span>
+        </div>
+    {% endif %}
+
+    <!-- IN_SERVICE ALERT BANNER -->
+    {% if ticket.status == 'IN_SERVICE' %}
+        <div class="alert alert-primary border-primary text-center p-4 mb-4 shadow rounded-3" role="alert">
+            <h3 class="fw-bold mb-1">CURRENTLY IN SERVICE AT COUNTER 1</h3>
+            <p class="mb-0 fs-5 fw-semibold text-dark">Your transaction is currently being processed by the registrar officer.</p>
+        </div>
+    {% endif %}
+
     <!-- CALLED ALERT BANNER & 5-MIN GRACE TIMER -->
     {% if ticket.status == 'CALLED' %}
         <div class="alert alert-success border-success text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
-            <h2 class="fw-bold mb-1">📢 YOUR TICKET IS BEING CALLED AT COUNTER 1</h2>
+            <h2 class="fw-bold mb-1">YOUR TICKET IS BEING CALLED AT COUNTER 1</h2>
             <p class="mb-3 fs-5 fw-semibold text-dark">Please proceed immediately to the counter window with your valid Mapúa ID.</p>
 
             <div class="bg-white p-3 rounded border border-success d-inline-block shadow-sm px-4">
-                <small class="text-uppercase fw-bold text-muted d-block mb-1">⏱️ 5-Minute Call Grace Clock</small>
+                <small class="text-uppercase fw-bold text-muted d-block mb-1">5-Minute Call Grace Clock</small>
                 <div id="callTimer" class="timer-display text-success">05:00</div>
                 <small id="callStatusText" class="text-secondary fw-bold">Remaining time before ticket is marked skipped</small>
             </div>
@@ -78,7 +95,7 @@
     {% elif ticket.status == 'SKIPPED' %}
         <div class="card border-warning shadow-sm mb-4">
             <div class="card-header bg-warning text-dark text-center py-3">
-                <h4 class="mb-0 fw-bold">⚠️ Call Window Missed</h4>
+                <h4 class="mb-0 fw-bold">Call Window Missed</h4>
                 <small class="fw-semibold">1-Chance Penalty Re-Queue Window Active</small>
             </div>
             <div class="card-body p-4 text-center">
@@ -87,13 +104,13 @@
                         You missed your counter call. You have <strong>15 minutes</strong> from the time of call to re-enter the queue.
                     </p>
                     <div class="bg-light p-3 rounded border mb-4 d-inline-block px-4">
-                        <small class="text-uppercase fw-bold text-muted d-block mb-1">⏱️ Re-Join Window Remaining</small>
+                        <small class="text-uppercase fw-bold text-muted d-block mb-1">Re-Join Window Remaining</small>
                         <div id="rejoinTimer" class="timer-display text-warning">15:00</div>
                     </div>
                     <div>
                         <form method="POST" action="/ticket/{{ ticket.id }}/rejoin">
                             <button type="submit" class="btn btn-warning btn-lg text-dark fw-bold px-4 py-3 shadow w-100">
-                                🔄 Re-join Queue with Penalty (+2.0 Offset)
+                                Re-join Queue with Penalty (+2.0 Offset)
                             </button>
                         </form>
                         <small class="text-muted d-block mt-2">
@@ -113,7 +130,7 @@
         </div>
     {% elif ticket.status == 'CANCELLED' %}
         <div class="alert alert-secondary text-center p-4 mb-4 shadow-sm rounded-3" role="alert">
-            <h4 class="fw-bold mb-1 text-danger">❌ Ticket Cancelled</h4>
+            <h4 class="fw-bold mb-1 text-danger">Ticket Cancelled</h4>
             <p class="text-muted mb-3">The 15-minute re-join window has expired. Please submit a new ticket to enter the queue.</p>
             <a href="/checkin" class="btn btn-mapua-cardinal px-4 py-2 fw-bold shadow-sm">
                 Submit a New Ticket

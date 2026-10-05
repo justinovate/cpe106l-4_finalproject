@@ -1,9 +1,9 @@
 # MapuaQ: Priority-Based Student Queuing System
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
+[![Python 3.14+](https://img.shields.io/badge/Python-3.14%2B-blue.svg)](https://www.python.org/)
 [![Flask 3.1](https://img.shields.io/badge/Flask-3.1.3-green.svg)](https://flask.palletsprojects.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 9 Passed](https://img.shields.io/badge/Tests-9%20Passed%20(100%25)-brightgreen.svg)](tests/)
+[![Tests: 13 Passed](https://img.shields.io/badge/Tests-13%20Passed%20(100%25)-brightgreen.svg)](tests/)
 
 **Course & Section:** CPE106L-4 / Section B2 (Software Design Laboratory)  
 **Institution:** Mapúa University, School of Artificial Intelligence, Electrical, Computer, and Electronics Engineering (AIECEE)  
@@ -15,6 +15,7 @@
 ## Quick Navigation
 
 - 📄 **Proposal Document**: [PROPOSAL.md](PROPOSAL.md)
+- 🚀 **Sprint 3 Report & Technical Documentation**: [README_SPRINT3.md](README_SPRINT3.md)
 - ⚙️ **Database DDL**: [schema.sql](schema.sql)
 - 🧪 **Automated Test Suite**: [tests/](tests/)
 
@@ -24,61 +25,45 @@
 
 **MapuaQ** is an algorithmic web application designed for the Mapúa University Registrar Office. It solves the critical problem of **queue starvation** during peak enrollment and clearance periods by combining an in-memory **Binary Min-Heap** data structure ($O(1)$ top lookup, $O(\log N)$ updates) with **Dynamic Priority Aging** based on the behavioral **Strategy Design Pattern**.
 
-### Sprint 4 Architecture Highlights
-
-- ⚡ **Binary Min-Heap Priority Queue (`heap_queue.py`)**: Priority score calculation evaluating request urgency ($60\%$), academic standing ($40\%$), dynamic aging discounts ($-1.0$ point per 15 minutes elapsed), and penalty offsets.
-- 🔄 **Decoupled Registrar Counter Workflow**: Operational lifecycle transition: `WAITING` $\rightarrow$ `CALLED` $\rightarrow$ `IN_SERVICE` (Mark Arrived) $\rightarrow$ `SERVED` (Complete Service).
-- 🔒 **SQLite Concurrency & Lock Prevention**: Write-Ahead Logging (`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`) with automatic table migration handling concurrent staff actions without database lock failures.
-- 🔔 **Proactive In-App "On-Deck" Notification Alert**: Real-time evaluation on `/ticket/<id>` alerting the Rank #1 waiting student when another student is being served at Counter 1:
-  > *"Notice: The student ahead of you has arrived and is currently being served at Counter 1. Please proceed to the registrar lobby and prepare your necessary documents."*
-- 👤 **Real Account Portal & Zero Email Gating**: Direct student self-registration (`/register`) with immediate active access (no email verification bottlenecks). Students provision their own actual academic records.
-- 🔁 **Single-Use Queue Rejoin**: 1-chance queue re-entry for skipped tickets (`/ticket/rejoin/<id>`).
+### Core Features (Sprint 4 Architecture):
+- **Binary Min-Heap Priority Queue (`heap_queue.py`)**: Priority score calculation evaluating request urgency ($60\%$), academic standing ($40\%$), dynamic aging discounts ($-1.0$ point per 15 minutes elapsed), and penalty offsets.
+- **Decoupled Registrar Counter Workflow**: Four-stage ticket status lifecycle: `WAITING` $\rightarrow$ `CALLED` $\rightarrow$ `IN_SERVICE` (Mark Arrived) $\rightarrow$ `SERVED` (or `SKIPPED`).
+- **In-App Queue Tracking & "On-Deck" Alerts**: Real-time ticket status tracking (`/ticket/<id>`), 5-minute arrival grace countdown, 1-chance 15-minute re-join window (+2.0 penalty offset), and proactive "On-Deck" heads-up alert for the student next in line (Rank #1).
+- **Authentication & Self-Registration**: Student self-registration portal (`/register`) with immediate active access (`email_verified = 1`), pre-seeded Lead Admin and Registrar Staff credentials, profile avatar management, and self-service password updates.
+- **Ticket Lifecycle & Audit Trail**: Operational soft-delete (voiding tickets with mandatory remarks) for Staff/Admins, and permanent hard-delete strictly restricted to Lead Administrators.
+- **Visual Analytics Module (`analytics.py`)**: Headless Matplotlib PNG rendering for queue volume breakdowns, priority score distributions, Net Satisfaction Score (NSS), and customer rating distributions.
 
 ---
 
-## Quick Start (Running Locally)
+## Quick Start
 
 ```bash
-# 1. Clone repository & navigate to project root
-cd cpe106l-4_finalproject
+# 1. Navigate to project root
+cd mapuaq
 
-# 2. Set up virtual environment (Windows or Linux/Mac)
-python -m venv venv
-# On Windows:
-.\venv\Scripts\activate
-# On Linux/Mac:
-source venv/bin/activate
-
-# 3. Install dependencies
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# 4. Launch local demonstration server
+# 3. Initialize database & seed initial credentials
 python app.py
 ```
 
-Access the application in your browser at: **`http://127.0.0.1:5000`**
+Access the application in your browser at: `http://127.0.0.1:5000`
 
 ### Pre-Seeded Access Credentials:
-
-| Role | Email / Identifier | Password | Student / Employee ID |
-| :--- | :--- | :--- | :--- |
-| **Lead Admin** | `admin@mapua.edu.ph` | `MapuaAdmin2026!` | `ADM-001` |
-| **Registrar Staff** | `registrar@mapua.edu.ph` | `StaffPass2026!` | `EMP-001` |
-| **Student Accounts** | *(Self-Registered)* | *(Self-Registered)* | Team members register via `/register` portal |
+- **Lead Admin**: `admin@mapua.edu.ph` / `MapuaAdmin2026!` (Employee ID: `ADM-001`)
+- **Registrar Staff**: `registrar@mapua.edu.ph` / `StaffPass2026!` (Employee ID: `EMP-001`)
+- **Student Accounts**: Team members register their own student accounts via `/register`.
 
 ---
 
 ## Running Automated Tests
 
-MapuaQ features an automated test suite verifying heap invariants, priority calculations, status lifecycle transitions, database WAL mode, and On-Deck alert detection:
+MapuaQ features an isolated **13-test AAA suite** verifying heap invariants, dynamic priority aging, decoupled counter lifecycle, On-Deck flags, registration, and administrative void/delete guards:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
-
-### Test Metrics (Sprint 4 Audit):
-- **Passing Test Cases**: **9 / 9 (100% OK)**
-- **Test Modules**: `tests/test_app.py`, `tests/test_heap.py`
 
 ---
 
