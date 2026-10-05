@@ -151,21 +151,17 @@ class MapuaQIsolatedAppTestCase(unittest.TestCase):
         self.assertTrue(data['notify_prepare'])
 
     def test_default_seeded_accounts_login(self):
-        """Test logging in with default seeded accounts for Registrar, Admin, and Student."""
+        """Test logging in with default seeded accounts for Registrar and Lead Admin."""
         # 1. Registrar Staff (registrar@mapua.edu.ph / StaffPass2026!)
         res_reg = self.client.post('/login', data={'email_or_id': 'registrar@mapua.edu.ph', 'password': 'StaffPass2026!'}, follow_redirects=True)
         self.assertIn(b'Welcome back', res_reg.data)
         self.client.get('/logout')
 
-        # 2. System Admin (admin@mapua.edu.ph / AdminPass2026!)
-        res_admin = self.client.post('/login', data={'email_or_id': 'admin@mapua.edu.ph', 'password': 'AdminPass2026!'}, follow_redirects=True)
+        # 2. Lead Admin (admin@mapua.edu.ph / MapuaAdmin2026!)
+        res_admin = self.client.post('/login', data={'email_or_id': 'admin@mapua.edu.ph', 'password': 'MapuaAdmin2026!'}, follow_redirects=True)
         self.assertIn(b'Welcome back', res_admin.data)
         self.client.get('/logout')
 
-        # 3. Demo Student (student@mymail.mapua.edu.ph / StudentPass123!)
-        res_stu = self.client.post('/login', data={'email_or_id': 'student@mymail.mapua.edu.ph', 'password': 'StudentPass123!'}, follow_redirects=True)
-        self.assertIn(b'Welcome back', res_stu.data)
-        self.client.get('/logout')
 
 
 if __name__ == "__main__":

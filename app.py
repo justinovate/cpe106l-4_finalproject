@@ -116,29 +116,33 @@ def seed_default_users(conn):
     
     # 1. Registrar Staff Account (registrar@mapua.edu.ph / StaffPass2026!)
     cur.execute("SELECT id FROM users WHERE email = ?", ('registrar@mapua.edu.ph',))
-    if not cur.fetchone():
+    row = cur.fetchone()
+    if not row:
         cur.execute(
             "INSERT INTO users (student_id, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
             ('EMP-001', 'Registrar Staff', 'registrar@mapua.edu.ph', generate_password_hash('StaffPass2026!'), 'STAFF')
         )
+    else:
+        cur.execute(
+            "UPDATE users SET password_hash = ?, role = 'STAFF' WHERE email = ?",
+            (generate_password_hash('StaffPass2026!'), 'registrar@mapua.edu.ph')
+        )
 
-    # 2. System Admin Account (admin@mapua.edu.ph / AdminPass2026!)
+    # 2. Lead Admin Account (admin@mapua.edu.ph / MapuaAdmin2026!)
     cur.execute("SELECT id FROM users WHERE email = ?", ('admin@mapua.edu.ph',))
-    if not cur.fetchone():
+    row = cur.fetchone()
+    if not row:
         cur.execute(
             "INSERT INTO users (student_id, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
-            ('ADM-001', 'System Administrator', 'admin@mapua.edu.ph', generate_password_hash('AdminPass2026!'), 'ADMIN')
+            ('ADM-001', 'Lead Admin', 'admin@mapua.edu.ph', generate_password_hash('MapuaAdmin2026!'), 'ADMIN')
         )
-
-    # 3. Demo Student Account (student@mymail.mapua.edu.ph / StudentPass123!)
-    cur.execute("SELECT id FROM users WHERE email = ?", ('student@mymail.mapua.edu.ph',))
-    if not cur.fetchone():
+    else:
         cur.execute(
-            "INSERT INTO users (student_id, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
-            ('2026100001', 'Demo Student', 'student@mymail.mapua.edu.ph', generate_password_hash('StudentPass123!'), 'STUDENT')
+            "UPDATE users SET password_hash = ?, role = 'ADMIN' WHERE email = ?",
+            (generate_password_hash('MapuaAdmin2026!'), 'admin@mapua.edu.ph')
         )
 
-    # 4. Secondary Staff Account (staff@mapua.edu.ph / staff123)
+    # 3. Secondary Staff Account (staff@mapua.edu.ph / staff123)
     cur.execute("SELECT id FROM users WHERE email = ?", ('staff@mapua.edu.ph',))
     if not cur.fetchone():
         cur.execute(
@@ -146,8 +150,10 @@ def seed_default_users(conn):
             ('STAFF-001', 'Registrar Staff (Alt)', 'staff@mapua.edu.ph', generate_password_hash('staff123'), 'STAFF')
         )
 
-    conn.commit()
+    # Remove any pre-seeded demo student accounts if present (student accounts provisioned manually or via admin/register)
+    cur.execute("DELETE FROM users WHERE email = ?", ('student@mymail.mapua.edu.ph',))
 
+    conn.commit()
 
 
 def login_required(f):
@@ -221,7 +227,12 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email_or_id = request.form.get('email_or_id', '').strip().lower()
+        email_or_id = (
+            request.form.get('email_or_id') or 
+            request.form.get('identifier') or 
+            request.form.get('email') or 
+            request.form.get('student_id') or ''
+        ).strip().lower()
         password = request.form.get('password', '')
 
         conn = get_db_connection()
@@ -251,6 +262,7 @@ def login():
             conn.close()
 
     return render_template('login.html')
+
 
 
 @app.route('/logout')
