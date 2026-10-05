@@ -148,7 +148,6 @@
                                 <th>Email Address</th>
                                 <td>
                                     <span class="text-primary fw-bold">{{ user_info.email }}</span>
-                                    <span class="badge bg-light text-muted border ms-2">Verified</span>
                                 </td>
                             </tr>
                             <tr>
@@ -324,14 +323,6 @@
                         <label class="form-label fw-bold">Select Image File</label>
                         <input type="file" name="avatar" class="form-control" accept="image/png, image/jpeg, image/jpg, image/webp" required>
                         <div class="form-text small text-muted">Allowed formats: PNG, JPG, JPEG, WEBP (Max 2MB).</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Initial Alignment</label>
-                        <select name="avatar_position" class="form-select">
-                            <option value="center" selected>Center (Default)</option>
-                            <option value="top">Top</option>
-                            <option value="bottom">Bottom</option>
-                        </select>
                     </div>
                 </div>
                 <div class="modal-footer">

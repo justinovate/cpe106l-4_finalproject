@@ -173,8 +173,8 @@
                                         {% if u[0] != user.id %}
                                             <form method="POST" action="/admin/users/{{ u[0] }}/reset-password" class="d-inline">
                                                 <input type="hidden" name="target_type" value="staff_user">
-                                                <button type="submit" class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" onclick="return confirm('Reset password for {{ u[3] }} ({{ u[2] }})? A temporary password will be emailed.')">
-                                                    🔑 Reset
+                                                <button type="submit" class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" onclick="return confirm('Reset password for {{ u[3] }} ({{ u[2] }})? A temporary password will be generated.')">
+                                                    Reset
                                                 </button>
                                             </form>
                                             <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStaffModal{{ u[0] }}">
@@ -195,7 +195,7 @@
                                                                     Are you sure you want to permanently remove staff account <strong>{{ u[3] }} ({{ u[2] }})</strong>?
                                                                 </p>
                                                                 <div class="alert alert-warning small py-2">
-                                                                    ⚠️ Warning: This action cannot be undone.
+                                                                    Warning: This action cannot be undone.
                                                                 </div>
                                                                 <input type="hidden" name="target_type" value="staff_user">
                                                                 <input type="hidden" name="user_id" value="{{ u[0] }}">
@@ -261,17 +261,13 @@
                                     <td><span class="text-primary">{{ s[2] }}</span></td>
                                     <td class="fw-bold">{{ s[3] }}</td>
                                     <td>
-                                        {% if s[7] %}
-                                            <span class="badge bg-success">✓ Verified</span>
-                                        {% else %}
-                                            <span class="badge bg-warning text-dark">⚠️ Unverified</span>
-                                        {% endif %}
+                                        <span class="badge bg-success">Active</span>
                                     </td>
                                     <td class="text-end">
                                         <form method="POST" action="/admin/users/{{ s[0] }}/reset-password" class="d-inline">
                                             <input type="hidden" name="target_type" value="student">
-                                            <button type="submit" class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" onclick="return confirm('Reset password for {{ s[3] }} ({{ s[2] }})? A temporary password will be emailed.')">
-                                                🔑 Reset
+                                            <button type="submit" class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" onclick="return confirm('Reset password for {{ s[3] }} ({{ s[2] }})? A temporary password will be generated.')">
+                                                Reset
                                             </button>
                                         </form>
                                         <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStudentModal{{ s[0] }}">
@@ -292,7 +288,7 @@
                                                                 Are you sure you want to permanently delete student account <strong>{{ s[3] }} ({{ s[2] }})</strong>?
                                                             </p>
                                                             <div class="alert alert-warning small py-2">
-                                                                ⚠️ Warning: This action will permanently remove this student's account.
+                                                                Warning: This action will permanently remove this student's account.
                                                             </div>
                                                             <input type="hidden" name="target_type" value="student">
                                                             <input type="hidden" name="user_id" value="{{ s[0] }}">
@@ -342,7 +338,7 @@
                         Are you sure you want to permanently remove <strong>ALL student accounts</strong> from the database?
                     </p>
                     <div class="alert alert-danger small py-2">
-                        ⚠️ Critical: All student login profiles will be deleted permanently.
+                        Critical: All student login profiles will be deleted permanently.
                     </div>
                     <input type="hidden" name="target_type" value="all_students">
                     <div class="mb-3">

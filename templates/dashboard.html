@@ -256,7 +256,7 @@
             <div>
                 <form method="POST" action="/tickets/{{ top_waiting.ticket_id }}/call">
                     <button type="submit" class="btn btn-warning btn-lg px-4 py-3 fw-bold shadow">
-                        📢 Call Next Student (#{{ top_waiting.ticket_id }})
+                        Call Next Student (#{{ top_waiting.ticket_id }})
                     </button>
                 </form>
             </div>
@@ -472,7 +472,7 @@
                         <td class="small">{{ t.remarks }}</td>
                         <td>
                             {% if t.feedback_rating %}
-                                <span class="badge bg-warning text-dark fs-6">{{ t.feedback_rating }} ★</span>
+                                <span class="badge bg-warning text-dark fs-6">{{ t.feedback_rating }} / 5 Stars</span>
                                 {% if t.feedback_comment %}
                                     <small class="d-block text-muted text-truncate" style="max-width: 150px;">"{{ t.feedback_comment }}"</small>
                                 {% endif %}
@@ -484,7 +484,7 @@
                         <td>
                             <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
                                 <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
-                                    🗑️ Delete
+                                    Delete
                                 </button>
                             </form>
                         </td>
@@ -541,7 +541,7 @@
                         <td>
                             <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
                                 <button type="submit" class="btn btn-sm btn-danger fw-bold">
-                                    🗑️ Delete
+                                    Delete
                                 </button>
                             </form>
                         </td>
@@ -604,7 +604,7 @@
                         <td>
                             <form method="POST" action="/tickets/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Permanently delete Ticket #{{ t.id }}? This action cannot be undone.');">
                                 <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
-                                    🗑️ Delete
+                                    Delete
                                 </button>
                             </form>
                         </td>

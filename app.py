@@ -646,96 +646,6 @@ def change_password():
     return render_template("change_password.html", must_change=must_change, user=session.get("user"))
 
 
-@app.route("/verify-email/<token>")
-def verify_email(token: str):
-    """Verifies student or staff email address using unique verification token."""
-    if not token:
-        flash("Invalid verification link.", "danger")
-        return redirect(url_for("login"))
-
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-
-        # Search in students table
-        cursor.execute("SELECT id, email, full_name FROM students WHERE verification_token = ?", (token,))
-        s_row = cursor.fetchone()
-
-        if s_row:
-            user_id, email, name = s_row
-            cursor.execute("UPDATE students SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
-            conn.commit()
-
-            if session.get("user") and session["user"].get("id") == user_id:
-                session["user"]["email_verified"] = True
-
-            flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
-            return redirect(url_for("login"))
-
-        # Search in staff_users table
-        cursor.execute("SELECT id, email, full_name FROM staff_users WHERE verification_token = ?", (token,))
-        su_row = cursor.fetchone()
-
-        if su_row:
-            user_id, email, name = su_row
-            cursor.execute("UPDATE staff_users SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
-            conn.commit()
-
-            if session.get("user") and session["user"].get("id") == user_id:
-                session["user"]["email_verified"] = True
-
-            flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
-            return redirect(url_for("login"))
-    finally:
-        conn.close()
-
-    flash("Invalid or expired email verification link.", "danger")
-    return redirect(url_for("login"))
-
-
-@app.route("/resend-verification", methods=["POST"])
-@login_required
-def resend_verification():
-    """Resends email verification notice for active user session."""
-    user_id = session["user"]["id"]
-    user_role = session["user"].get("role", "student")
-    table_name = "students" if user_role == "student" else "staff_users"
-
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT id, email, full_name, student_id, verification_token, email_verified FROM {table_name} WHERE id = ?", (user_id,))
-        row = cursor.fetchone()
-
-        if not row:
-            flash("Account not found.", "danger")
-            return redirect(url_for("login"))
-
-        u_id, email, name, acct_id, v_token, is_verified = row
-
-        if is_verified:
-            flash("Your email address is already verified.", "info")
-            return redirect(url_for("student_dashboard") if user_role == "student" else url_for("dashboard"))
-
-        if not v_token:
-            v_token = secrets.token_urlsafe(32)
-            cursor.execute(f"UPDATE {table_name} SET verification_token = ? WHERE id = ?", (v_token, u_id))
-            conn.commit()
-    finally:
-        conn.close()
-
-    notifier.send_welcome_account_notice(
-        to_email=email,
-        full_name=name,
-        account_id=acct_id or email,
-        default_password="[Your Existing Password]",
-        verification_token=v_token,
-        role=user_role
-    )
-
-    flash(f"A fresh email verification link has been dispatched to {email}.", "success")
-    return redirect(url_for("student_dashboard") if user_role == "student" else url_for("dashboard"))
-
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -793,7 +703,7 @@ def logout():
 @app.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
-    """User profile view, avatar update, reposition, remove, password change, and personal ticket history."""
+    """User profile view, avatar update, remove, password change, and personal ticket history."""
     user_id = session["user"]["id"]
     user_role = session["user"].get("role", "student")
     target_table = "students" if user_role == "student" else "staff_users"
@@ -837,13 +747,6 @@ def profile():
                         flash("Profile picture updated successfully!", "success")
                     else:
                         flash("Invalid file format. Allowed: PNG, JPG, JPEG, WEBP.", "danger")
-
-            elif action == "reposition_avatar":
-                position = request.form.get("avatar_position", "center")
-                cursor.execute(f"UPDATE {target_table} SET avatar_position = ? WHERE id = ?", (position, user_id))
-                conn.commit()
-                session["user"]["avatar_position"] = position
-                flash("Profile picture alignment updated!", "success")
 
             elif action == "remove_avatar":
                 default_url = "/static/uploads/avatars/default.png"
@@ -1722,24 +1625,14 @@ def admin_users():
                     if d1 or d2:
                         flash(f"Student or Account with Email '{email}' or ID '{student_id}' already exists.", "danger")
                     else:
-                        v_token = secrets.token_urlsafe(32)
                         pass_hash = generate_password_hash(password)
                         cursor.execute("""
-                            INSERT INTO students (student_id, email, password_hash, full_name, program_dept, avatar_url, email_verified, verification_token, created_at)
-                            VALUES (?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
-                        """, (student_id, email, pass_hash, full_name, program_dept, v_token, time.time()))
+                            INSERT INTO students (student_id, email, password_hash, full_name, program_dept, avatar_url, email_verified, created_at)
+                            VALUES (?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 1, ?)
+                        """, (student_id, email, pass_hash, full_name, program_dept, time.time()))
                         conn.commit()
 
-                        notifier.send_welcome_account_notice(
-                            to_email=email,
-                            full_name=full_name,
-                            account_id=student_id,
-                            default_password=password,
-                            verification_token=v_token,
-                            role="student"
-                        )
-
-                        flash(f"Student account '{full_name}' ({email}) successfully created. Verification email dispatched with account details.", "success")
+                        flash(f"Student account '{full_name}' ({email}) successfully created.", "success")
                         return redirect(url_for("admin_users"))
                 else:
                     cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
@@ -1750,24 +1643,14 @@ def admin_users():
                     if d1 or d2:
                         flash(f"Staff account with Email '{email}' or Employee ID '{student_id}' already exists.", "danger")
                     else:
-                        v_token = secrets.token_urlsafe(32)
                         pass_hash = generate_password_hash(password)
                         cursor.execute("""
-                            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, email_verified, verification_token, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
-                        """, (student_id, email, pass_hash, full_name, role, program_dept, v_token, time.time()))
+                            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, email_verified, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 1, ?)
+                        """, (student_id, email, pass_hash, full_name, role, program_dept, time.time()))
                         conn.commit()
 
-                        notifier.send_welcome_account_notice(
-                            to_email=email,
-                            full_name=full_name,
-                            account_id=student_id,
-                            default_password=password,
-                            verification_token=v_token,
-                            role=role
-                        )
-
-                        flash(f"Staff/Admin account '{full_name}' ({email}) successfully created as {role.upper()}. Verification email dispatched with account details.", "success")
+                        flash(f"Staff/Admin account '{full_name}' ({email}) successfully created as {role.upper()}.", "success")
                         return redirect(url_for("admin_users"))
             finally:
                 conn.close()
@@ -1832,7 +1715,7 @@ def admin_delete_user():
 @app.route("/admin/users/reset-password", methods=["POST"])
 @admin_required
 def admin_reset_password(user_id: int = None):
-    """Admin-only route to generate an 8-character temporary password and email reset notice."""
+    """Admin-only route to generate a temporary password and flash on-screen."""
     if not user_id:
         user_id = request.form.get("user_id", type=int)
     target_type = request.form.get("target_type", "").strip()
@@ -1880,13 +1763,7 @@ def admin_reset_password(user_id: int = None):
     finally:
         conn.close()
 
-    email_sent = notifier.send_password_reset_notice(email, full_name, temp_pass)
-
-    if email_sent:
-        flash(f"Password for {full_name} reset to: <strong>{temp_pass}</strong> (Dispatched to {email}).", "success")
-    else:
-        flash(f"Password for {full_name} reset to: <strong>{temp_pass}</strong>, but email delivery failed. Please deliver it manually.", "warning")
-
+    flash(f"Password reset for {full_name}. Temporary Password: {temp_pass}", "success")
     return redirect(url_for("admin_users"))
 
 

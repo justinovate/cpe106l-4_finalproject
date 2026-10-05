@@ -114,7 +114,7 @@
                         </div>
                         <div class="mt-3 mt-md-0 d-flex gap-2">
                             <a href="/checkin" class="btn btn-mapua-cardinal px-3 py-2 shadow-sm">
-                                Send Request / Get Ticket
+                                Issue New Ticket
                             </a>
                             <a href="/profile" class="btn btn-outline-secondary px-3 py-2 fw-bold">
                                 Edit Profile
@@ -206,7 +206,7 @@
     <!-- Ticket History Section -->
     <div class="card shadow-sm border-0 rounded-3">
         <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-            <h5 class="fw-bold mb-0 text-dark">📜 My Registrar Request History</h5>
+            <h5 class="fw-bold mb-0 text-dark">My Registrar Request History</h5>
             <span class="badge bg-secondary">{{ tickets | length }} Request(s)</span>
         </div>
         <div class="table-responsive">
@@ -245,8 +245,8 @@
                                     <span class="text-secondary d-block"><strong>Staff Note:</strong> {{ t.remarks }}</span>
                                 {% endif %}
                                 {% if t.feedback_rating %}
-                                    <span class="text-warning">
-                                        {% for i in range(t.feedback_rating) %}★{% endfor %}
+                                    <span class="badge bg-warning text-dark">
+                                        Rating: {{ t.feedback_rating }}/5
                                     </span>
                                 {% else %}
                                     <span class="text-muted">—</span>

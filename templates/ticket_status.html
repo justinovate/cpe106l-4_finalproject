@@ -206,7 +206,7 @@
                         <h3 class="fw-bold text-warning text-dark mb-1">In Queue (Waiting)</h3>
                         <p class="text-muted mb-0">Your ticket is active in the priority scheduling queue.</p>
                         {% if ticket.penalty_offset and ticket.penalty_offset > 0 %}
-                            <small class="text-danger fw-bold d-block mt-1">⚠️ Priority Penalty Offset Active (+2.0 points)</small>
+                            <small class="text-danger fw-bold d-block mt-1">Priority Penalty Offset Active (+2.0 points)</small>
                         {% endif %}
                     </div>
 
@@ -231,23 +231,23 @@
                     </div>
                 {% elif ticket.status == 'SERVED' %}
                     <div class="p-3 bg-success bg-opacity-10 border border-success rounded-3 mb-3">
-                        <h3 class="fw-bold text-success mb-1">✓ Completed / Served</h3>
+                        <h3 class="fw-bold text-success mb-1">Completed / Served</h3>
                         <p class="text-muted mb-0">Your transaction was processed successfully.</p>
                     </div>
 
                     {% if not ticket.feedback_rating %}
                         <div class="card border-warning bg-warning bg-opacity-10 shadow-sm mt-3 p-3 text-center">
-                            <h5 class="fw-bold text-dark mb-1">⭐ How was your service experience?</h5>
+                            <h5 class="fw-bold text-dark mb-1">How was your service experience?</h5>
                             <p class="text-secondary small mb-3">Please take 30 seconds to rate your registrar counter transaction.</p>
                             <div>
                                 <a href="/ticket/{{ ticket.id }}/feedback" class="btn btn-warning text-dark fw-bold px-4 py-2 shadow-sm">
-                                    ⭐ Submit Feedback
+                                    Submit Feedback
                                 </a>
                             </div>
                         </div>
                     {% else %}
                         <div class="card border-info bg-info bg-opacity-10 shadow-sm mt-3 p-3 text-center">
-                            <h6 class="fw-bold text-dark mb-1">✓ Feedback Submitted</h6>
+                            <h6 class="fw-bold text-dark mb-1">Feedback Submitted</h6>
                             <div class="text-warning fs-5 my-1">
                                 {% for i in range(ticket.feedback_rating) %}★{% endfor %}{% for i in range(5 - ticket.feedback_rating) %}☆{% endfor %}
                             </div>
@@ -263,7 +263,7 @@
         </div>
 
         <div class="card-footer bg-white text-center py-3 border-0">
-            <small class="text-muted d-block mb-1">🔄 Page automatically refreshes every 10 seconds.</small>
+            <small class="text-muted d-block mb-1">Page automatically refreshes every 10 seconds.</small>
             <a href="/checkin" class="btn btn-link text-mapua-cardinal text-decoration-none btn-sm fw-bold">Issue Another Ticket</a>
         </div>
     </div>
