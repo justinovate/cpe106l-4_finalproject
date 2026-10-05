@@ -20,42 +20,51 @@ def _resolve_db_path(db_path: str = None) -> str:
     return db_path
 
 
+def _get_db_conn(db_path: str = None):
+    """Returns sqlite3 connection with WAL mode and 5000ms busy timeout enabled."""
+    target_db = _resolve_db_path(db_path)
+    conn = sqlite3.connect(target_db, timeout=20.0)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")
+    return conn
+
+
 def get_analytics_summary(db_path: str = None) -> dict:
     """Returns key queue metrics and student feedback satisfaction statistics from SQLite database."""
-    target_db = _resolve_db_path(db_path)
-    conn = sqlite3.connect(target_db)
-    cursor = conn.cursor()
+    conn = _get_db_conn(db_path)
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM tickets")
-    total = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM tickets")
+        total = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'WAITING'")
-    waiting = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'WAITING'")
+        waiting = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'SERVED'")
-    served = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'SERVED'")
+        served = cursor.fetchone()[0]
 
-    cursor.execute("SELECT request_type, COUNT(*) FROM tickets GROUP BY request_type")
-    by_request = dict(cursor.fetchall())
+        cursor.execute("SELECT request_type, COUNT(*) FROM tickets GROUP BY request_type")
+        by_request = dict(cursor.fetchall())
 
-    cursor.execute("SELECT grade_level, COUNT(*) FROM tickets GROUP BY grade_level")
-    by_level = dict(cursor.fetchall())
+        cursor.execute("SELECT grade_level, COUNT(*) FROM tickets GROUP BY grade_level")
+        by_level = dict(cursor.fetchall())
 
-    # Feedback Satisfaction Metrics
-    cursor.execute("SELECT COUNT(*), AVG(feedback_rating) FROM tickets WHERE feedback_rating IS NOT NULL")
-    fb_row = cursor.fetchone()
-    total_feedback = fb_row[0] if fb_row and fb_row[0] else 0
-    avg_satisfaction = round(fb_row[1], 2) if (fb_row and fb_row[1] is not None) else 0.0
+        # Feedback Satisfaction Metrics
+        cursor.execute("SELECT COUNT(*), AVG(feedback_rating) FROM tickets WHERE feedback_rating IS NOT NULL")
+        fb_row = cursor.fetchone()
+        total_feedback = fb_row[0] if fb_row and fb_row[0] else 0
+        avg_satisfaction = round(fb_row[1], 2) if (fb_row and fb_row[1] is not None) else 0.0
 
-    response_rate = round((total_feedback / served * 100), 1) if served > 0 else 0.0
+        response_rate = round((total_feedback / served * 100), 1) if served > 0 else 0.0
 
-    cursor.execute("SELECT feedback_rating, COUNT(*) FROM tickets WHERE feedback_rating IS NOT NULL GROUP BY feedback_rating")
-    rating_dist = {i: 0 for i in range(1, 6)}
-    for r, count in cursor.fetchall():
-        if r in rating_dist:
-            rating_dist[r] = count
-
-    conn.close()
+        cursor.execute("SELECT feedback_rating, COUNT(*) FROM tickets WHERE feedback_rating IS NOT NULL GROUP BY feedback_rating")
+        rating_dist = {i: 0 for i in range(1, 6)}
+        for r, count in cursor.fetchall():
+            if r in rating_dist:
+                rating_dist[r] = count
+    finally:
+        conn.close()
 
     return {
         "total_tickets": total,
@@ -72,19 +81,19 @@ def get_analytics_summary(db_path: str = None) -> dict:
 
 def generate_queue_volume_chart(db_path: str = None) -> bytes:
     """Generates a PNG bar chart of queue volume by Request Type and Status."""
-    target_db = _resolve_db_path(db_path)
-    conn = sqlite3.connect(target_db)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT request_type, 
-               SUM(CASE WHEN status = 'WAITING' THEN 1 ELSE 0 END) as waiting_count,
-               SUM(CASE WHEN status = 'SERVED' THEN 1 ELSE 0 END) as served_count
-        FROM tickets
-        GROUP BY request_type
-    """)
-    rows = cursor.fetchall()
-    conn.close()
+    conn = _get_db_conn(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT request_type, 
+                   SUM(CASE WHEN status = 'WAITING' THEN 1 ELSE 0 END) as waiting_count,
+                   SUM(CASE WHEN status = 'SERVED' THEN 1 ELSE 0 END) as served_count
+            FROM tickets
+            GROUP BY request_type
+        """)
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
 
     categories = [r[0] for r in rows] if rows else ["No Data"]
     waiting_counts = [r[1] for r in rows] if rows else [0]
@@ -120,12 +129,13 @@ def generate_queue_volume_chart(db_path: str = None) -> bytes:
 
 def generate_priority_distribution_chart(db_path: str = None) -> bytes:
     """Generates a PNG histogram of priority score distribution."""
-    target_db = _resolve_db_path(db_path)
-    conn = sqlite3.connect(target_db)
-    cursor = conn.cursor()
-    cursor.execute("SELECT priority_score FROM tickets")
-    scores = [r[0] for r in cursor.fetchall()]
-    conn.close()
+    conn = _get_db_conn(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT priority_score FROM tickets")
+        scores = [r[0] for r in cursor.fetchall()]
+    finally:
+        conn.close()
 
     fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
 
@@ -151,17 +161,18 @@ def generate_priority_distribution_chart(db_path: str = None) -> bytes:
 
 def generate_feedback_rating_chart(db_path: str = None) -> bytes:
     """Generates a PNG bar chart of Student Feedback Satisfaction Star Ratings (1-5 Stars)."""
-    target_db = _resolve_db_path(db_path)
-    conn = sqlite3.connect(target_db)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT feedback_rating, COUNT(*)
-        FROM tickets
-        WHERE feedback_rating IS NOT NULL
-        GROUP BY feedback_rating
-    """)
-    rows = dict(cursor.fetchall())
-    conn.close()
+    conn = _get_db_conn(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT feedback_rating, COUNT(*)
+            FROM tickets
+            WHERE feedback_rating IS NOT NULL
+            GROUP BY feedback_rating
+        """)
+        rows = dict(cursor.fetchall())
+    finally:
+        conn.close()
 
     labels = ['1 Star', '2 Stars', '3 Stars', '4 Stars', '5 Stars']
     counts = [rows.get(i, 0) for i in range(1, 6)]

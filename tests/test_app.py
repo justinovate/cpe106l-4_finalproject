@@ -62,7 +62,7 @@ class MapuaQIsolatedAppTestCase(unittest.TestCase):
         # Test Admin login
         admin_login = self.client.post("/login", data={
             "identifier": "admin@mapua.edu.ph",
-            "password": "MapuaAdmin2026!"
+            "password": "AdminPass2026!"
         }, follow_redirects=True)
         self.assertEqual(admin_login.status_code, 200)
 
@@ -296,7 +296,7 @@ class MapuaQIsolatedAppTestCase(unittest.TestCase):
         conn.close()
 
         # Login Admin
-        self.client.post("/login", data={"identifier": "admin@mapua.edu.ph", "password": "MapuaAdmin2026!"})
+        self.client.post("/login", data={"identifier": "admin@mapua.edu.ph", "password": "AdminPass2026!"})
 
         # Hard Delete
         del_resp = self.client.post(f"/tickets/{t_id}/delete", follow_redirects=True)

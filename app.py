@@ -34,10 +34,49 @@ strategy = StandardRegistrarStrategy()
 
 def get_db_connection():
     """Returns sqlite3 connection with WAL mode and 5000ms busy timeout enabled."""
-    conn = sqlite3.connect(Config.DB_NAME)
+    conn = sqlite3.connect(Config.DB_NAME, timeout=20.0)
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA busy_timeout=5000;")
     return conn
+
+
+def seed_default_users(conn=None):
+    """Seeds default Staff and Admin accounts into staff_users table."""
+    close_at_end = False
+    if conn is None:
+        conn = get_db_connection()
+        close_at_end = True
+    try:
+        cursor = conn.cursor()
+
+        # Seed default Admin account into staff_users
+        cursor.execute("SELECT id FROM staff_users WHERE lower(email) = 'admin@mapua.edu.ph' OR lower(employee_id) IN ('admin', 'adm-001')")
+        admin_row = cursor.fetchone()
+        admin_pass = generate_password_hash("AdminPass2026!")
+        if admin_row:
+            cursor.execute("UPDATE staff_users SET password_hash = ?, employee_id = 'ADM-001', role = 'admin', email_verified = 1 WHERE id = ?", (admin_pass, admin_row[0]))
+        else:
+            cursor.execute("""
+                INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at, email_verified)
+                VALUES ('ADM-001', 'admin@mapua.edu.ph', ?, 'Lead Registrar Admin', 'admin', 'Registrar Administration', '/static/uploads/avatars/default.png', ?, 1)
+            """, (admin_pass, time.time()))
+
+        # Seed default Staff account into staff_users
+        cursor.execute("SELECT id FROM staff_users WHERE lower(email) = 'registrar@mapua.edu.ph' OR lower(employee_id) IN ('registrar', 'emp-001')")
+        staff_row = cursor.fetchone()
+        staff_pass = generate_password_hash("StaffPass2026!")
+        if staff_row:
+            cursor.execute("UPDATE staff_users SET password_hash = ?, employee_id = 'EMP-001', role = 'staff', email_verified = 1 WHERE id = ?", (staff_pass, staff_row[0]))
+        else:
+            cursor.execute("""
+                INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at, email_verified)
+                VALUES ('EMP-001', 'registrar@mapua.edu.ph', ?, 'Registrar Staff Officer', 'staff', 'Registrar Counter', '/static/uploads/avatars/default.png', ?, 1)
+            """, (staff_pass, time.time()))
+
+        conn.commit()
+    finally:
+        if close_at_end:
+            conn.close()
 
 
 def generate_temp_password(length: int = 8) -> str:
@@ -87,131 +126,110 @@ def allowed_file(filename: str) -> bool:
 def init_db():
     """Initializes separate staff_users and students tables, performs migrations, and seeds default Admin & Staff accounts."""
     conn = get_db_connection()
-    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
-    with open(schema_path, "r") as f:
-        conn.executescript(f.read())
-    conn.commit()
+    try:
+        schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+        with open(schema_path, "r") as f:
+            conn.executescript(f.read())
+        conn.commit()
 
-    cursor = conn.cursor()
+        cursor = conn.cursor()
 
-    # Migration check: if legacy 'users' table exists, migrate staff/admin records to staff_users and drop 'users'
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-    if cursor.fetchone():
-        cursor.execute("""
-            INSERT OR IGNORE INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
-            SELECT COALESCE(student_id, 'EMP-' || id), email, password_hash, full_name, role, program_dept, avatar_url, created_at
-            FROM users WHERE role IN ('staff', 'admin')
-        """)
+        # Migration check: if legacy 'users' table exists, migrate staff/admin records to staff_users and drop 'users'
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        if cursor.fetchone():
+            cursor.execute("""
+                INSERT OR IGNORE INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at)
+                SELECT COALESCE(student_id, 'EMP-' || id), email, password_hash, full_name, role, program_dept, avatar_url, created_at
+                FROM users WHERE role IN ('staff', 'admin')
+            """)
 
-    # Migration check: ensure columns exist in staff_users
-    cursor.execute("PRAGMA table_info(staff_users)")
-    su_cols = [row[1] for row in cursor.fetchall()]
-    if "avatar_position" not in su_cols:
-        cursor.execute("ALTER TABLE staff_users ADD COLUMN avatar_position TEXT DEFAULT 'center'")
-    if "phone_number" not in su_cols:
-        cursor.execute("ALTER TABLE staff_users ADD COLUMN phone_number TEXT NULL")
-    if "must_change_password" not in su_cols:
-        cursor.execute("ALTER TABLE staff_users ADD COLUMN must_change_password INTEGER DEFAULT 0")
-    if "email_verified" not in su_cols:
-        cursor.execute("ALTER TABLE staff_users ADD COLUMN email_verified INTEGER DEFAULT 1")
-    if "verification_token" not in su_cols:
-        cursor.execute("ALTER TABLE staff_users ADD COLUMN verification_token TEXT NULL")
+        # Migration check: ensure columns exist in staff_users
+        cursor.execute("PRAGMA table_info(staff_users)")
+        su_cols = [row[1] for row in cursor.fetchall()]
+        if "avatar_position" not in su_cols:
+            cursor.execute("ALTER TABLE staff_users ADD COLUMN avatar_position TEXT DEFAULT 'center'")
+        if "phone_number" not in su_cols:
+            cursor.execute("ALTER TABLE staff_users ADD COLUMN phone_number TEXT NULL")
+        if "must_change_password" not in su_cols:
+            cursor.execute("ALTER TABLE staff_users ADD COLUMN must_change_password INTEGER DEFAULT 0")
+        if "email_verified" not in su_cols:
+            cursor.execute("ALTER TABLE staff_users ADD COLUMN email_verified INTEGER DEFAULT 1")
+        if "verification_token" not in su_cols:
+            cursor.execute("ALTER TABLE staff_users ADD COLUMN verification_token TEXT NULL")
 
-    # Migration check: ensure columns exist in students
-    cursor.execute("PRAGMA table_info(students)")
-    st_cols = [row[1] for row in cursor.fetchall()]
-    if "avatar_position" not in st_cols:
-        cursor.execute("ALTER TABLE students ADD COLUMN avatar_position TEXT DEFAULT 'center'")
-    if "phone_number" not in st_cols:
-        cursor.execute("ALTER TABLE students ADD COLUMN phone_number TEXT NULL")
-    if "must_change_password" not in st_cols:
-        cursor.execute("ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0")
-    if "email_verified" not in st_cols:
-        cursor.execute("ALTER TABLE students ADD COLUMN email_verified INTEGER DEFAULT 1")
-    if "verification_token" not in st_cols:
-        cursor.execute("ALTER TABLE students ADD COLUMN verification_token TEXT NULL")
+        # Migration check: ensure columns exist in students
+        cursor.execute("PRAGMA table_info(students)")
+        st_cols = [row[1] for row in cursor.fetchall()]
+        if "avatar_position" not in st_cols:
+            cursor.execute("ALTER TABLE students ADD COLUMN avatar_position TEXT DEFAULT 'center'")
+        if "phone_number" not in st_cols:
+            cursor.execute("ALTER TABLE students ADD COLUMN phone_number TEXT NULL")
+        if "must_change_password" not in st_cols:
+            cursor.execute("ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0")
+        if "email_verified" not in st_cols:
+            cursor.execute("ALTER TABLE students ADD COLUMN email_verified INTEGER DEFAULT 1")
+        if "verification_token" not in st_cols:
+            cursor.execute("ALTER TABLE students ADD COLUMN verification_token TEXT NULL")
 
-    # Migration check for tickets schema (arrived_at column and IN_SERVICE status in CHECK constraint)
-    cursor.execute("PRAGMA table_info(tickets)")
-    tk_cols = [row[1] for row in cursor.fetchall()]
-    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='tickets'")
-    sql_row = cursor.fetchone()
-    if sql_row and "IN_SERVICE" not in sql_row[0]:
-        cursor.execute("PRAGMA foreign_keys=OFF")
-        cursor.execute("""
-            CREATE TABLE tickets_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_number TEXT,
-                user_id INTEGER,
-                student_id TEXT NOT NULL,
-                full_name TEXT NOT NULL,
-                email TEXT NOT NULL,
-                request_type TEXT NOT NULL,
-                request_weight INTEGER NOT NULL,
-                grade_level TEXT NOT NULL,
-                level_weight INTEGER NOT NULL,
-                arrival_timestamp REAL NOT NULL,
-                priority_score REAL NOT NULL,
-                penalty_offset REAL DEFAULT 0.0,
-                status TEXT CHECK(status IN ('WAITING', 'CALLED', 'IN_SERVICE', 'SERVED', 'SKIPPED', 'CANCELLED', 'INVALID')) DEFAULT 'WAITING',
-                called_at REAL NULL,
-                arrived_at REAL NULL,
-                skipped_at REAL NULL,
-                served_at REAL NULL,
-                served_by TEXT NULL,
-                remarks TEXT NULL,
-                feedback_rating INTEGER NULL,
-                feedback_comment TEXT NULL,
-                feedback_submitted_at REAL NULL,
-                rejoin_used INTEGER DEFAULT 0
-            )
-        """)
-        cursor.execute("""
-            INSERT INTO tickets_new (id, user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, penalty_offset, status, called_at, skipped_at, served_at, served_by, remarks, feedback_rating, feedback_comment, feedback_submitted_at, rejoin_used)
-            SELECT id, user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, penalty_offset, status, called_at, skipped_at, served_at, served_by, remarks, feedback_rating, feedback_comment, feedback_submitted_at, rejoin_used FROM tickets
-        """)
-        cursor.execute("DROP TABLE tickets")
-        cursor.execute("ALTER TABLE tickets_new RENAME TO tickets")
-        cursor.execute("PRAGMA foreign_keys=ON")
-    elif "arrived_at" not in tk_cols:
-        cursor.execute("ALTER TABLE tickets ADD COLUMN arrived_at REAL NULL")
+        # Migration check for tickets schema (arrived_at column and IN_SERVICE status in CHECK constraint)
+        cursor.execute("PRAGMA table_info(tickets)")
+        tk_cols = [row[1] for row in cursor.fetchall()]
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='tickets'")
+        sql_row = cursor.fetchone()
+        if sql_row and "IN_SERVICE" not in sql_row[0]:
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.execute("""
+                CREATE TABLE tickets_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_number TEXT,
+                    user_id INTEGER,
+                    student_id TEXT NOT NULL,
+                    full_name TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    request_type TEXT NOT NULL,
+                    request_weight INTEGER NOT NULL,
+                    grade_level TEXT NOT NULL,
+                    level_weight INTEGER NOT NULL,
+                    arrival_timestamp REAL NOT NULL,
+                    priority_score REAL NOT NULL,
+                    penalty_offset REAL DEFAULT 0.0,
+                    status TEXT CHECK(status IN ('WAITING', 'CALLED', 'IN_SERVICE', 'SERVED', 'SKIPPED', 'CANCELLED', 'INVALID')) DEFAULT 'WAITING',
+                    called_at REAL NULL,
+                    arrived_at REAL NULL,
+                    skipped_at REAL NULL,
+                    served_at REAL NULL,
+                    served_by TEXT NULL,
+                    remarks TEXT NULL,
+                    feedback_rating INTEGER NULL,
+                    feedback_comment TEXT NULL,
+                    feedback_submitted_at REAL NULL,
+                    rejoin_used INTEGER DEFAULT 0
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO tickets_new (id, user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, penalty_offset, status, called_at, skipped_at, served_at, served_by, remarks, feedback_rating, feedback_comment, feedback_submitted_at, rejoin_used)
+                SELECT id, user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, penalty_offset, status, called_at, skipped_at, served_at, served_by, remarks, feedback_rating, feedback_comment, feedback_submitted_at, rejoin_used FROM tickets
+            """)
+            cursor.execute("DROP TABLE tickets")
+            cursor.execute("ALTER TABLE tickets_new RENAME TO tickets")
+            cursor.execute("PRAGMA foreign_keys=ON")
+        elif "arrived_at" not in tk_cols:
+            cursor.execute("ALTER TABLE tickets ADD COLUMN arrived_at REAL NULL")
 
-    if "skipped_at" not in tk_cols:
-        try: cursor.execute("ALTER TABLE tickets ADD COLUMN skipped_at REAL NULL")
-        except: pass
-    if "rejoin_used" not in tk_cols:
-        try: cursor.execute("ALTER TABLE tickets ADD COLUMN rejoin_used INTEGER DEFAULT 0")
-        except: pass
-    if "penalty_offset" not in tk_cols:
-        try: cursor.execute("ALTER TABLE tickets ADD COLUMN penalty_offset REAL DEFAULT 0.0")
-        except: pass
+        if "skipped_at" not in tk_cols:
+            try: cursor.execute("ALTER TABLE tickets ADD COLUMN skipped_at REAL NULL")
+            except: pass
+        if "rejoin_used" not in tk_cols:
+            try: cursor.execute("ALTER TABLE tickets ADD COLUMN rejoin_used INTEGER DEFAULT 0")
+            except: pass
+        if "penalty_offset" not in tk_cols:
+            try: cursor.execute("ALTER TABLE tickets ADD COLUMN penalty_offset REAL DEFAULT 0.0")
+            except: pass
 
-    conn.commit()
-
-    # Seed default Admin account into staff_users
-    cursor.execute("SELECT id FROM staff_users WHERE lower(email) = 'admin@mapua.edu.ph' OR lower(employee_id) IN ('admin', 'adm-001')")
-    admin_row = cursor.fetchone()
-    if admin_row:
-        cursor.execute("UPDATE staff_users SET password_hash = ?, employee_id = 'ADM-001', role = 'admin', email_verified = 1 WHERE id = ?", (generate_password_hash("MapuaAdmin2026!"), admin_row[0]))
-    else:
-        cursor.execute("""
-            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at, email_verified)
-            VALUES ('ADM-001', 'admin@mapua.edu.ph', ?, 'Lead Registrar Admin', 'admin', 'Registrar Administration', '/static/uploads/avatars/default.png', ?, 1)
-        """, (generate_password_hash("MapuaAdmin2026!"), time.time()))
-
-    # Seed default Staff account into staff_users
-    cursor.execute("SELECT id FROM staff_users WHERE lower(email) = 'registrar@mapua.edu.ph' OR lower(employee_id) IN ('registrar', 'emp-001')")
-    staff_row = cursor.fetchone()
-    if staff_row:
-        cursor.execute("UPDATE staff_users SET password_hash = ?, employee_id = 'EMP-001', role = 'staff', email_verified = 1 WHERE id = ?", (generate_password_hash("StaffPass2026!"), staff_row[0]))
-    else:
-        cursor.execute("""
-            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, created_at, email_verified)
-            VALUES ('EMP-001', 'registrar@mapua.edu.ph', ?, 'Registrar Staff Officer', 'staff', 'Registrar Counter', '/static/uploads/avatars/default.png', ?, 1)
-        """, (generate_password_hash("StaffPass2026!"), time.time()))
-
-    conn.commit()
-    conn.close()
+        conn.commit()
+        seed_default_users(conn)
+    finally:
+        conn.close()
 
 
 # Ensure database tables and seeded credentials exist upon module import
@@ -219,20 +237,20 @@ with app.app_context():
     init_db()
 
 
-
-
 def check_and_expire_skipped_tickets():
     """Checks for SKIPPED tickets where skipped_at is older than 15 minutes (900s) and auto-cancels them."""
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cutoff = time.time() - 900
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'CANCELLED', remarks = '15-minute re-join window expired (No re-queue request received)'
-        WHERE status = 'SKIPPED' AND skipped_at IS NOT NULL AND skipped_at < ?
-    """, (cutoff,))
-    conn.commit()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cutoff = time.time() - 900
+        cursor.execute("""
+            UPDATE tickets
+            SET status = 'CANCELLED', remarks = '15-minute re-join window expired (No re-queue request received)'
+            WHERE status = 'SKIPPED' AND skipped_at IS NOT NULL AND skipped_at < ?
+        """, (cutoff,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def login_required(f):
@@ -272,14 +290,16 @@ def load_queue_from_db() -> RegistrarMinHeapQueue:
     """Loads active waiting tickets from SQLite, calculates dynamic aging and penalties, and returns Min-Heap Queue."""
     check_and_expire_skipped_tickets()
     queue = RegistrarMinHeapQueue(strategy)
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, penalty_offset, skipped_at, rejoin_used
-        FROM tickets WHERE status = 'WAITING'
-    """)
-    rows = cursor.fetchall()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, request_weight, grade_level, level_weight, arrival_timestamp, penalty_offset, skipped_at, rejoin_used
+            FROM tickets WHERE status = 'WAITING'
+        """)
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
 
     for r in rows:
         ticket = StudentTicket(
@@ -333,111 +353,111 @@ def student_dashboard():
         return redirect(url_for("dashboard"))
 
     user_id = session["user"]["id"]
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
 
-    # Fetch fresh student profile details from database
-    cursor.execute("""
-        SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at, COALESCE(email_verified, 0)
-        FROM students WHERE id = ?
-    """, (user_id,))
-    u_row = cursor.fetchone()
+        # Fetch fresh student profile details from database
+        cursor.execute("""
+            SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at, COALESCE(email_verified, 0)
+            FROM students WHERE id = ?
+        """, (user_id,))
+        u_row = cursor.fetchone()
 
-    if not u_row:
-        conn.close()
-        session.pop("user", None)
-        flash("Student account not found. Please log in again.", "danger")
-        return redirect(url_for("login"))
+        if not u_row:
+            session.pop("user", None)
+            flash("Student account not found. Please log in again.", "danger")
+            return redirect(url_for("login"))
 
-    user_info = {
-        "id": u_row[0],
-        "student_id": u_row[1],
-        "email": u_row[2],
-        "full_name": u_row[3],
-        "role": "student",
-        "program_dept": u_row[4],
-        "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
-        "avatar_position": u_row[6] or "center",
-        "phone_number": u_row[7] or "",
-        "created_at": u_row[8],
-        "email_verified": bool(u_row[9])
-    }
-
-    # Synchronize session state with current database details
-    session["user"]["full_name"] = user_info["full_name"]
-    session["user"]["student_id"] = user_info["student_id"]
-    session["user"]["email"] = user_info["email"]
-    session["user"]["avatar_url"] = user_info["avatar_url"]
-    session["user"]["avatar_position"] = user_info["avatar_position"]
-    session["user"]["email_verified"] = user_info["email_verified"]
-
-    # Fetch active ticket (status = 'WAITING', 'CALLED', or 'IN_SERVICE')
-    cursor.execute("""
-        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, served_by, remarks
-        FROM tickets
-        WHERE (user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?))
-          AND status IN ('WAITING', 'CALLED', 'IN_SERVICE')
-        ORDER BY arrival_timestamp DESC
-        LIMIT 1
-    """, (user_id, user_info["email"], user_info["student_id"]))
-    active_row = cursor.fetchone()
-
-    active_ticket = None
-    students_ahead = 0
-    estimated_wait_mins = 0
-
-    if active_row:
-        active_ticket = {
-            "id": active_row[0],
-            "student_id": active_row[1],
-            "full_name": active_row[2],
-            "request_type": active_row[3],
-            "arrival_timestamp": active_row[4],
-            "status": active_row[5],
-            "priority_score": active_row[6],
-            "served_at": active_row[7],
-            "served_by": active_row[8],
-            "remarks": active_row[9]
+        user_info = {
+            "id": u_row[0],
+            "student_id": u_row[1],
+            "email": u_row[2],
+            "full_name": u_row[3],
+            "role": "student",
+            "program_dept": u_row[4],
+            "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
+            "avatar_position": u_row[6] or "center",
+            "phone_number": u_row[7] or "",
+            "created_at": u_row[8],
+            "email_verified": bool(u_row[9])
         }
-        if active_ticket["status"] == "WAITING":
-            queue = load_queue_from_db()
-            sorted_queue = queue.get_sorted_list()
-            for idx, t in enumerate(sorted_queue):
-                if t.ticket_id == active_ticket["id"]:
-                    students_ahead = idx
-                    break
-            estimated_wait_mins = students_ahead * 5
 
-    cursor.execute("SELECT id FROM tickets WHERE status = 'IN_SERVICE' LIMIT 1")
-    in_service_row = cursor.fetchone()
-    is_on_deck = bool(in_service_row and active_ticket and active_ticket["status"] == "WAITING" and students_ahead == 0)
+        # Synchronize session state with current database details
+        session["user"]["full_name"] = user_info["full_name"]
+        session["user"]["student_id"] = user_info["student_id"]
+        session["user"]["email"] = user_info["email"]
+        session["user"]["avatar_url"] = user_info["avatar_url"]
+        session["user"]["avatar_position"] = user_info["avatar_position"]
+        session["user"]["email_verified"] = user_info["email_verified"]
 
-    # Fetch full ticket history for this student
-    cursor.execute("""
-        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment, remarks
-        FROM tickets
-        WHERE (user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?))
-        ORDER BY arrival_timestamp DESC
-    """, (user_id, user_info["email"], user_info["student_id"]))
-    t_rows = cursor.fetchall()
+        # Fetch active ticket (status = 'WAITING', 'CALLED', or 'IN_SERVICE')
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, served_by, remarks
+            FROM tickets
+            WHERE (user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?))
+              AND status IN ('WAITING', 'CALLED', 'IN_SERVICE')
+            ORDER BY arrival_timestamp DESC
+            LIMIT 1
+        """, (user_id, user_info["email"], user_info["student_id"]))
+        active_row = cursor.fetchone()
 
-    my_tickets = []
-    for r in t_rows:
-        my_tickets.append({
-            "id": r[0],
-            "student_id": r[1],
-            "full_name": r[2],
-            "request_type": r[3],
-            "arrival_timestamp": r[4],
-            "status": r[5],
-            "priority_score": r[6],
-            "served_at": r[7],
-            "feedback_rating": r[8],
-            "feedback_comment": r[9],
-            "remarks": r[10] or "—"
-        })
+        active_ticket = None
+        students_ahead = 0
+        estimated_wait_mins = 0
 
-    conn.close()
+        if active_row:
+            active_ticket = {
+                "id": active_row[0],
+                "student_id": active_row[1],
+                "full_name": active_row[2],
+                "request_type": active_row[3],
+                "arrival_timestamp": active_row[4],
+                "status": active_row[5],
+                "priority_score": active_row[6],
+                "served_at": active_row[7],
+                "served_by": active_row[8],
+                "remarks": active_row[9]
+            }
+            if active_ticket["status"] == "WAITING":
+                queue = load_queue_from_db()
+                sorted_queue = queue.get_sorted_list()
+                for idx, t in enumerate(sorted_queue):
+                    if t.ticket_id == active_ticket["id"]:
+                        students_ahead = idx
+                        break
+                estimated_wait_mins = students_ahead * 5
+
+        cursor.execute("SELECT id FROM tickets WHERE status = 'IN_SERVICE' LIMIT 1")
+        in_service_row = cursor.fetchone()
+        is_on_deck = bool(in_service_row and active_ticket and active_ticket["status"] == "WAITING" and students_ahead == 0)
+
+        # Fetch full ticket history for this student
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment, remarks
+            FROM tickets
+            WHERE (user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?))
+            ORDER BY arrival_timestamp DESC
+        """, (user_id, user_info["email"], user_info["student_id"]))
+        t_rows = cursor.fetchall()
+
+        my_tickets = []
+        for r in t_rows:
+            my_tickets.append({
+                "id": r[0],
+                "student_id": r[1],
+                "full_name": r[2],
+                "request_type": r[3],
+                "arrival_timestamp": r[4],
+                "status": r[5],
+                "priority_score": r[6],
+                "served_at": r[7],
+                "feedback_rating": r[8],
+                "feedback_comment": r[9],
+                "remarks": r[10] or "—"
+            })
+    finally:
+        conn.close()
 
     return render_template(
         "student_dashboard.html",
@@ -546,31 +566,32 @@ def forgot_password():
         flash("If the provided account exists, recovery instructions have been sent to your registered MyMail.", "info")
 
         if identifier:
-            conn = sqlite3.connect(DB)
-            cursor = conn.cursor()
+            conn = get_db_connection()
+            try:
+                cursor = conn.cursor()
 
-            # Search student accounts first
-            cursor.execute("SELECT id, email, full_name FROM students WHERE lower(email) = ? OR lower(student_id) = ?", (identifier, identifier))
-            u_row = cursor.fetchone()
-            table_name = "students"
-
-            if not u_row:
-                # Search staff accounts
-                cursor.execute("SELECT id, email, full_name FROM staff_users WHERE lower(email) = ? OR lower(employee_id) = ?", (identifier, identifier))
+                # Search student accounts first
+                cursor.execute("SELECT id, email, full_name FROM students WHERE lower(email) = ? OR lower(student_id) = ?", (identifier, identifier))
                 u_row = cursor.fetchone()
-                table_name = "staff_users"
+                table_name = "students"
 
-            if u_row:
-                u_id, email, full_name = u_row
-                temp_pass = generate_temp_password(8)
-                pass_hash = generate_password_hash(temp_pass)
+                if not u_row:
+                    # Search staff accounts
+                    cursor.execute("SELECT id, email, full_name FROM staff_users WHERE lower(email) = ? OR lower(employee_id) = ?", (identifier, identifier))
+                    u_row = cursor.fetchone()
+                    table_name = "staff_users"
 
-                cursor.execute(f"UPDATE {table_name} SET password_hash = ?, must_change_password = 1 WHERE id = ?", (pass_hash, u_id))
-                conn.commit()
+                if u_row:
+                    u_id, email, full_name = u_row
+                    temp_pass = generate_temp_password(8)
+                    pass_hash = generate_password_hash(temp_pass)
 
-                notifier.send_password_reset_notice(email, full_name, temp_pass)
+                    cursor.execute(f"UPDATE {table_name} SET password_hash = ?, must_change_password = 1 WHERE id = ?", (pass_hash, u_id))
+                    conn.commit()
 
-            conn.close()
+                    notifier.send_password_reset_notice(email, full_name, temp_pass)
+            finally:
+                conn.close()
 
         return redirect(url_for("login"))
 
@@ -591,30 +612,29 @@ def change_password():
         new_pass = request.form.get("new_password", "")
         confirm_pass = request.form.get("confirm_password", "")
 
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT password_hash FROM {target_table} WHERE id = ?", (user_id,))
-        row = cursor.fetchone()
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT password_hash FROM {target_table} WHERE id = ?", (user_id,))
+            row = cursor.fetchone()
 
-        if not row or not check_password_hash(row[0], current_pass):
-            flash("Current password is incorrect.", "danger")
+            if not row or not check_password_hash(row[0], current_pass):
+                flash("Current password is incorrect.", "danger")
+                return render_template("change_password.html", must_change=must_change, user=session.get("user"))
+
+            if new_pass != confirm_pass:
+                flash("New passwords do not match. Please re-type your new password accurately.", "danger")
+                return render_template("change_password.html", must_change=must_change, user=session.get("user"))
+
+            if len(new_pass) < 6:
+                flash("New password must be at least 6 characters long.", "danger")
+                return render_template("change_password.html", must_change=must_change, user=session.get("user"))
+
+            new_pass_hash = generate_password_hash(new_pass)
+            cursor.execute(f"UPDATE {target_table} SET password_hash = ?, must_change_password = 0 WHERE id = ?", (new_pass_hash, user_id))
+            conn.commit()
+        finally:
             conn.close()
-            return render_template("change_password.html", must_change=must_change, user=session.get("user"))
-
-        if new_pass != confirm_pass:
-            flash("New passwords do not match. Please re-type your new password accurately.", "danger")
-            conn.close()
-            return render_template("change_password.html", must_change=must_change, user=session.get("user"))
-
-        if len(new_pass) < 6:
-            flash("New password must be at least 6 characters long.", "danger")
-            conn.close()
-            return render_template("change_password.html", must_change=must_change, user=session.get("user"))
-
-        new_pass_hash = generate_password_hash(new_pass)
-        cursor.execute(f"UPDATE {target_table} SET password_hash = ?, must_change_password = 0 WHERE id = ?", (new_pass_hash, user_id))
-        conn.commit()
-        conn.close()
 
         session["user"]["must_change_password"] = False
         flash("Your password has been successfully updated!", "success")
@@ -633,42 +653,42 @@ def verify_email(token: str):
         flash("Invalid verification link.", "danger")
         return redirect(url_for("login"))
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
 
-    # Search in students table
-    cursor.execute("SELECT id, email, full_name FROM students WHERE verification_token = ?", (token,))
-    s_row = cursor.fetchone()
+        # Search in students table
+        cursor.execute("SELECT id, email, full_name FROM students WHERE verification_token = ?", (token,))
+        s_row = cursor.fetchone()
 
-    if s_row:
-        user_id, email, name = s_row
-        cursor.execute("UPDATE students SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
-        conn.commit()
+        if s_row:
+            user_id, email, name = s_row
+            cursor.execute("UPDATE students SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
+            conn.commit()
+
+            if session.get("user") and session["user"].get("id") == user_id:
+                session["user"]["email_verified"] = True
+
+            flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
+            return redirect(url_for("login"))
+
+        # Search in staff_users table
+        cursor.execute("SELECT id, email, full_name FROM staff_users WHERE verification_token = ?", (token,))
+        su_row = cursor.fetchone()
+
+        if su_row:
+            user_id, email, name = su_row
+            cursor.execute("UPDATE staff_users SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
+            conn.commit()
+
+            if session.get("user") and session["user"].get("id") == user_id:
+                session["user"]["email_verified"] = True
+
+            flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
+            return redirect(url_for("login"))
+    finally:
         conn.close()
 
-        if session.get("user") and session["user"].get("id") == user_id:
-            session["user"]["email_verified"] = True
-
-        flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
-        return redirect(url_for("login"))
-
-    # Search in staff_users table
-    cursor.execute("SELECT id, email, full_name FROM staff_users WHERE verification_token = ?", (token,))
-    su_row = cursor.fetchone()
-
-    if su_row:
-        user_id, email, name = su_row
-        cursor.execute("UPDATE staff_users SET email_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
-        conn.commit()
-        conn.close()
-
-        if session.get("user") and session["user"].get("id") == user_id:
-            session["user"]["email_verified"] = True
-
-        flash(f"Email address {email} has been successfully verified! Thank you, {name}.", "success")
-        return redirect(url_for("login"))
-
-    conn.close()
     flash("Invalid or expired email verification link.", "danger")
     return redirect(url_for("login"))
 
@@ -681,29 +701,28 @@ def resend_verification():
     user_role = session["user"].get("role", "student")
     table_name = "students" if user_role == "student" else "staff_users"
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT id, email, full_name, student_id, verification_token, email_verified FROM {table_name} WHERE id = ?", (user_id,))
-    row = cursor.fetchone()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT id, email, full_name, student_id, verification_token, email_verified FROM {table_name} WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
 
-    if not row:
+        if not row:
+            flash("Account not found.", "danger")
+            return redirect(url_for("login"))
+
+        u_id, email, name, acct_id, v_token, is_verified = row
+
+        if is_verified:
+            flash("Your email address is already verified.", "info")
+            return redirect(url_for("student_dashboard") if user_role == "student" else url_for("dashboard"))
+
+        if not v_token:
+            v_token = secrets.token_urlsafe(32)
+            cursor.execute(f"UPDATE {table_name} SET verification_token = ? WHERE id = ?", (v_token, u_id))
+            conn.commit()
+    finally:
         conn.close()
-        flash("Account not found.", "danger")
-        return redirect(url_for("login"))
-
-    u_id, email, name, acct_id, v_token, is_verified = row
-
-    if is_verified:
-        conn.close()
-        flash("Your email address is already verified.", "info")
-        return redirect(url_for("student_dashboard") if user_role == "student" else url_for("dashboard"))
-
-    if not v_token:
-        v_token = secrets.token_urlsafe(32)
-        cursor.execute(f"UPDATE {table_name} SET verification_token = ? WHERE id = ?", (v_token, u_id))
-        conn.commit()
-
-    conn.close()
 
     notifier.send_welcome_account_notice(
         to_email=email,
@@ -782,195 +801,195 @@ def profile():
     if request.method == "POST":
         action = request.form.get("action")
 
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
 
-        if action == "update_info":
-            full_name = request.form.get("full_name", "").strip()
-            program_dept = request.form.get("program_dept", "").strip()
-            phone_number = request.form.get("phone_number", "").strip()
+            if action == "update_info":
+                full_name = request.form.get("full_name", "").strip()
+                program_dept = request.form.get("program_dept", "").strip()
+                phone_number = request.form.get("phone_number", "").strip()
 
-            if full_name:
-                cursor.execute(f"UPDATE {target_table} SET full_name = ?, program_dept = ?, phone_number = ? WHERE id = ?", (full_name, program_dept, phone_number, user_id))
-                conn.commit()
-                session["user"]["full_name"] = full_name
-                session["user"]["program_dept"] = program_dept
-                flash("Basic profile details updated successfully!", "success")
-            else:
-                flash("Full name cannot be blank.", "danger")
-
-        elif action == "update_avatar":
-            position = request.form.get("avatar_position", "center")
-            if "avatar" in request.files:
-                file = request.files["avatar"]
-                if file and file.filename != "" and allowed_file(file.filename):
-                    filename = secure_filename(file.filename)
-                    ext = filename.rsplit(".", 1)[1].lower()
-                    unique_filename = f"avatar_{session['user'].get('student_id', 'usr')}_{int(time.time())}_{uuid.uuid4().hex[:6]}.{ext}"
-                    file.save(os.path.join(UPLOAD_FOLDER, unique_filename))
-                    new_avatar_url = f"/static/uploads/avatars/{unique_filename}"
-
-                    cursor.execute(f"UPDATE {target_table} SET avatar_url = ?, avatar_position = ? WHERE id = ?", (new_avatar_url, position, user_id))
+                if full_name:
+                    cursor.execute(f"UPDATE {target_table} SET full_name = ?, program_dept = ?, phone_number = ? WHERE id = ?", (full_name, program_dept, phone_number, user_id))
                     conn.commit()
-                    session["user"]["avatar_url"] = new_avatar_url
-                    session["user"]["avatar_position"] = position
-                    flash("Profile picture updated successfully!", "success")
+                    session["user"]["full_name"] = full_name
+                    session["user"]["program_dept"] = program_dept
+                    flash("Basic profile details updated successfully!", "success")
                 else:
-                    flash("Invalid file format. Allowed: PNG, JPG, JPEG, WEBP.", "danger")
+                    flash("Full name cannot be blank.", "danger")
 
-        elif action == "reposition_avatar":
-            position = request.form.get("avatar_position", "center")
-            cursor.execute(f"UPDATE {target_table} SET avatar_position = ? WHERE id = ?", (position, user_id))
-            conn.commit()
-            session["user"]["avatar_position"] = position
-            flash("Profile picture alignment updated!", "success")
+            elif action == "update_avatar":
+                position = request.form.get("avatar_position", "center")
+                if "avatar" in request.files:
+                    file = request.files["avatar"]
+                    if file and file.filename != "" and allowed_file(file.filename):
+                        filename = secure_filename(file.filename)
+                        ext = filename.rsplit(".", 1)[1].lower()
+                        unique_filename = f"avatar_{session['user'].get('student_id', 'usr')}_{int(time.time())}_{uuid.uuid4().hex[:6]}.{ext}"
+                        file.save(os.path.join(UPLOAD_FOLDER, unique_filename))
+                        new_avatar_url = f"/static/uploads/avatars/{unique_filename}"
 
-        elif action == "remove_avatar":
-            default_url = "/static/uploads/avatars/default.png"
-            cursor.execute(f"UPDATE {target_table} SET avatar_url = ?, avatar_position = 'center' WHERE id = ?", (default_url, user_id))
-            conn.commit()
-            session["user"]["avatar_url"] = default_url
-            session["user"]["avatar_position"] = "center"
-            flash("Profile picture removed successfully.", "info")
+                        cursor.execute(f"UPDATE {target_table} SET avatar_url = ?, avatar_position = ? WHERE id = ?", (new_avatar_url, position, user_id))
+                        conn.commit()
+                        session["user"]["avatar_url"] = new_avatar_url
+                        session["user"]["avatar_position"] = position
+                        flash("Profile picture updated successfully!", "success")
+                    else:
+                        flash("Invalid file format. Allowed: PNG, JPG, JPEG, WEBP.", "danger")
 
-        elif action == "update_password":
-            current_pass = request.form.get("current_password", "")
-            new_pass = request.form.get("new_password", "")
-            confirm_pass = request.form.get("confirm_password", "")
-
-            cursor.execute(f"SELECT password_hash FROM {target_table} WHERE id = ?", (user_id,))
-            row = cursor.fetchone()
-
-            if not row or not check_password_hash(row[0], current_pass):
-                flash("Current password is incorrect.", "danger")
-            elif new_pass != confirm_pass:
-                flash("New passwords do not match. Please re-type your new password accurately.", "danger")
-            elif len(new_pass) < 6:
-                flash("New password must be at least 6 characters long.", "danger")
-            else:
-                new_pass_hash = generate_password_hash(new_pass)
-                cursor.execute(f"UPDATE {target_table} SET password_hash = ? WHERE id = ?", (new_pass_hash, user_id))
+            elif action == "reposition_avatar":
+                position = request.form.get("avatar_position", "center")
+                cursor.execute(f"UPDATE {target_table} SET avatar_position = ? WHERE id = ?", (position, user_id))
                 conn.commit()
-                flash("Password updated successfully!", "success")
+                session["user"]["avatar_position"] = position
+                flash("Profile picture alignment updated!", "success")
 
-        conn.close()
+            elif action == "remove_avatar":
+                default_url = "/static/uploads/avatars/default.png"
+                cursor.execute(f"UPDATE {target_table} SET avatar_url = ?, avatar_position = 'center' WHERE id = ?", (default_url, user_id))
+                conn.commit()
+                session["user"]["avatar_url"] = default_url
+                session["user"]["avatar_position"] = "center"
+                flash("Profile picture removed successfully.", "info")
+
+            elif action == "update_password":
+                current_pass = request.form.get("current_password", "")
+                new_pass = request.form.get("new_password", "")
+                confirm_pass = request.form.get("confirm_password", "")
+
+                cursor.execute(f"SELECT password_hash FROM {target_table} WHERE id = ?", (user_id,))
+                row = cursor.fetchone()
+
+                if not row or not check_password_hash(row[0], current_pass):
+                    flash("Current password is incorrect.", "danger")
+                elif new_pass != confirm_pass:
+                    flash("New passwords do not match. Please re-type your new password accurately.", "danger")
+                elif len(new_pass) < 6:
+                    flash("New password must be at least 6 characters long.", "danger")
+                else:
+                    new_pass_hash = generate_password_hash(new_pass)
+                    cursor.execute(f"UPDATE {target_table} SET password_hash = ? WHERE id = ?", (new_pass_hash, user_id))
+                    conn.commit()
+                    flash("Password updated successfully!", "success")
+        finally:
+            conn.close()
         return redirect(url_for("profile"))
 
     # Fetch User Info & Role-Specific Profile Data
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
 
-    my_tickets = []
-    staff_stats = None
+        my_tickets = []
+        staff_stats = None
 
-    if user_role == "student":
-        cursor.execute("""
-            SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at
-            FROM students WHERE id = ?
-        """, (user_id,))
-        u_row = cursor.fetchone()
+        if user_role == "student":
+            cursor.execute("""
+                SELECT id, student_id, email, full_name, program_dept, avatar_url, avatar_position, phone_number, created_at
+                FROM students WHERE id = ?
+            """, (user_id,))
+            u_row = cursor.fetchone()
 
-        if not u_row:
-            conn.close()
-            session.pop("user", None)
-            flash("Account not found. Please log in again.", "danger")
-            return redirect(url_for("login"))
+            if not u_row:
+                session.pop("user", None)
+                flash("Account not found. Please log in again.", "danger")
+                return redirect(url_for("login"))
 
-        user_info = {
-            "id": u_row[0],
-            "student_id": u_row[1],
-            "email": u_row[2],
-            "full_name": u_row[3],
-            "role": "student",
-            "program_dept": u_row[4],
-            "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
-            "avatar_position": u_row[6] or "center",
-            "phone_number": u_row[7] or "",
-            "created_at": u_row[8]
-        }
+            user_info = {
+                "id": u_row[0],
+                "student_id": u_row[1],
+                "email": u_row[2],
+                "full_name": u_row[3],
+                "role": "student",
+                "program_dept": u_row[4],
+                "avatar_url": u_row[5] or "/static/uploads/avatars/default.png",
+                "avatar_position": u_row[6] or "center",
+                "phone_number": u_row[7] or "",
+                "created_at": u_row[8]
+            }
 
-        cursor.execute("""
-            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment
-            FROM tickets
-            WHERE user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?)
-            ORDER BY arrival_timestamp DESC
-        """, (user_id, user_info["email"], user_info["student_id"]))
-        t_rows = cursor.fetchall()
+            cursor.execute("""
+                SELECT id, student_id, full_name, request_type, arrival_timestamp, status, priority_score, served_at, feedback_rating, feedback_comment
+                FROM tickets
+                WHERE user_id = ? OR lower(email) = lower(?) OR (student_id IS NOT NULL AND student_id = ?)
+                ORDER BY arrival_timestamp DESC
+            """, (user_id, user_info["email"], user_info["student_id"]))
+            t_rows = cursor.fetchall()
 
-        for r in t_rows:
-            my_tickets.append({
-                "id": r[0],
-                "student_id": r[1],
-                "full_name": r[2],
-                "request_type": r[3],
-                "arrival_timestamp": r[4],
-                "status": r[5],
-                "priority_score": r[6],
-                "served_at": r[7],
-                "feedback_rating": r[8],
-                "feedback_comment": r[9]
-            })
-    else:
-        cursor.execute("""
-            SELECT id, employee_id, email, full_name, role, program_dept, avatar_url, avatar_position, phone_number, created_at
-            FROM staff_users WHERE id = ?
-        """, (user_id,))
-        u_row = cursor.fetchone()
+            for r in t_rows:
+                my_tickets.append({
+                    "id": r[0],
+                    "student_id": r[1],
+                    "full_name": r[2],
+                    "request_type": r[3],
+                    "arrival_timestamp": r[4],
+                    "status": r[5],
+                    "priority_score": r[6],
+                    "served_at": r[7],
+                    "feedback_rating": r[8],
+                    "feedback_comment": r[9]
+                })
+        else:
+            cursor.execute("""
+                SELECT id, employee_id, email, full_name, role, program_dept, avatar_url, avatar_position, phone_number, created_at
+                FROM staff_users WHERE id = ?
+            """, (user_id,))
+            u_row = cursor.fetchone()
 
-        if not u_row:
-            conn.close()
-            session.pop("user", None)
-            flash("Account not found. Please log in again.", "danger")
-            return redirect(url_for("login"))
+            if not u_row:
+                session.pop("user", None)
+                flash("Account not found. Please log in again.", "danger")
+                return redirect(url_for("login"))
 
-        user_info = {
-            "id": u_row[0],
-            "student_id": u_row[1],
-            "employee_id": u_row[1],
-            "email": u_row[2],
-            "full_name": u_row[3],
-            "role": u_row[4],
-            "program_dept": u_row[5],
-            "avatar_url": u_row[6] or "/static/uploads/avatars/default.png",
-            "avatar_position": u_row[7] or "center",
-            "phone_number": u_row[8] or "",
-            "created_at": u_row[9]
-        }
+            user_info = {
+                "id": u_row[0],
+                "student_id": u_row[1],
+                "employee_id": u_row[1],
+                "email": u_row[2],
+                "full_name": u_row[3],
+                "role": u_row[4],
+                "program_dept": u_row[5],
+                "avatar_url": u_row[6] or "/static/uploads/avatars/default.png",
+                "avatar_position": u_row[7] or "center",
+                "phone_number": u_row[8] or "",
+                "created_at": u_row[9]
+            }
 
-        staff_identifier = user_info["email"]
-        cursor.execute("SELECT COUNT(*) FROM tickets WHERE served_by = ? AND status = 'SERVED'", (staff_identifier,))
-        total_served = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM tickets WHERE served_by = ? AND status = 'SKIPPED'", (staff_identifier,))
-        total_skipped = cursor.fetchone()[0]
+            staff_identifier = user_info["email"]
+            cursor.execute("SELECT COUNT(*) FROM tickets WHERE served_by = ? AND status = 'SERVED'", (staff_identifier,))
+            total_served = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM tickets WHERE served_by = ? AND status = 'SKIPPED'", (staff_identifier,))
+            total_skipped = cursor.fetchone()[0]
 
-        cursor.execute("""
-            SELECT id, student_id, full_name, request_type, served_at, status, remarks
-            FROM tickets
-            WHERE served_by = ?
-            ORDER BY served_at DESC
-            LIMIT 15
-        """, (staff_identifier,))
-        s_rows = cursor.fetchall()
+            cursor.execute("""
+                SELECT id, student_id, full_name, request_type, served_at, status, remarks
+                FROM tickets
+                WHERE served_by = ?
+                ORDER BY served_at DESC
+                LIMIT 15
+            """, (staff_identifier,))
+            s_rows = cursor.fetchall()
 
-        staff_history = []
-        for r in s_rows:
-            staff_history.append({
-                "id": r[0],
-                "student_id": r[1],
-                "full_name": r[2],
-                "request_type": r[3],
-                "served_at": r[4],
-                "status": r[5],
-                "remarks": r[6] or "—"
-            })
+            staff_history = []
+            for r in s_rows:
+                staff_history.append({
+                    "id": r[0],
+                    "student_id": r[1],
+                    "full_name": r[2],
+                    "request_type": r[3],
+                    "served_at": r[4],
+                    "status": r[5],
+                    "remarks": r[6] or "—"
+                })
 
-        staff_stats = {
-            "total_served": total_served,
-            "total_skipped": total_skipped,
-            "history": staff_history
-        }
-
-    conn.close()
+            staff_stats = {
+                "total_served": total_served,
+                "total_skipped": total_skipped,
+                "history": staff_history
+            }
+    finally:
+        conn.close()
 
     return render_template("profile.html", user_info=user_info, tickets=my_tickets, staff_stats=staff_stats, user=session.get("user"))
 
@@ -1001,15 +1020,17 @@ def checkin():
         arrival_ts = time.time()
         initial_score = strategy.calculate_score(req_w, lvl_w, arrival_ts)
 
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tickets (user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'WAITING')
-        """, (user_id, student_id, full_name, email, req_type, req_w, level, lvl_w, arrival_ts, initial_score))
-        ticket_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO tickets (user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, priority_score, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'WAITING')
+            """, (user_id, student_id, full_name, email, req_type, req_w, level, lvl_w, arrival_ts, initial_score))
+            ticket_id = cursor.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
 
         # Calculate queue position & dispatch notification
         queue = load_queue_from_db()
@@ -1041,14 +1062,16 @@ def ticket_status(ticket_id: int):
     """Student live ticket tracking status view with 10s auto-refresh and grace/rejoin countdowns."""
     check_and_expire_skipped_tickets()
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, served_at, served_by, feedback_rating, feedback_comment, called_at, skipped_at, rejoin_used, penalty_offset, remarks
-        FROM tickets WHERE id = ?
-    """, (ticket_id,))
-    row = cursor.fetchone()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, served_at, served_by, feedback_rating, feedback_comment, called_at, skipped_at, rejoin_used, penalty_offset, remarks
+            FROM tickets WHERE id = ?
+        """, (ticket_id,))
+        row = cursor.fetchone()
+    finally:
+        conn.close()
 
     if not row:
         flash("Ticket not found.", "danger")
@@ -1085,10 +1108,12 @@ def ticket_status(ticket_id: int):
         estimated_wait_mins = students_ahead * 5
 
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM tickets WHERE status = 'IN_SERVICE' LIMIT 1")
-    in_service_row = cursor.fetchone()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM tickets WHERE status = 'IN_SERVICE' LIMIT 1")
+        in_service_row = cursor.fetchone()
+    finally:
+        conn.close()
     is_on_deck = bool(in_service_row and ticket["status"] == "WAITING" and students_ahead == 0)
 
     return render_template(
@@ -1105,34 +1130,35 @@ def ticket_status(ticket_id: int):
 def api_ticket_status(ticket_id: int):
     """API Endpoint returning JSON ticket status and on_deck status for polling."""
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_id, full_name, request_type, arrival_timestamp, status, called_at, arrived_at, served_at
-        FROM tickets WHERE id = ?
-    """, (ticket_id,))
-    row = cursor.fetchone()
-    if not row:
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, called_at, arrived_at, served_at
+            FROM tickets WHERE id = ?
+        """, (ticket_id,))
+        row = cursor.fetchone()
+        if not row:
+            return {"error": "Ticket not found"}, 404
+
+        status = row[5]
+        students_ahead = 0
+        estimated_wait_mins = 0
+
+        if status == "WAITING":
+            queue = load_queue_from_db()
+            sorted_queue = queue.get_sorted_list()
+            for idx, t in enumerate(sorted_queue):
+                if t.ticket_id == ticket_id:
+                    students_ahead = idx
+                    break
+            estimated_wait_mins = students_ahead * 5
+
+        cursor.execute("SELECT id FROM tickets WHERE status = 'IN_SERVICE' LIMIT 1")
+        in_service = cursor.fetchone()
+        is_on_deck = bool(in_service and status == "WAITING" and students_ahead == 0)
+    finally:
         conn.close()
-        return {"error": "Ticket not found"}, 404
 
-    status = row[5]
-    students_ahead = 0
-    estimated_wait_mins = 0
-
-    if status == "WAITING":
-        queue = load_queue_from_db()
-        sorted_queue = queue.get_sorted_list()
-        for idx, t in enumerate(sorted_queue):
-            if t.ticket_id == ticket_id:
-                students_ahead = idx
-                break
-        estimated_wait_mins = students_ahead * 5
-
-    cursor.execute("SELECT id FROM tickets WHERE status = 'IN_SERVICE' LIMIT 1")
-    in_service = cursor.fetchone()
-    is_on_deck = bool(in_service and status == "WAITING" and students_ahead == 0)
-
-    conn.close()
     return {
         "id": row[0],
         "student_id": row[1],
@@ -1151,14 +1177,16 @@ def api_ticket_status(ticket_id: int):
 @app.route("/ticket/<int:ticket_id>/feedback", methods=["GET", "POST"])
 def ticket_feedback(ticket_id: int):
     """Student feedback survey workflow for completed registrar tickets."""
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_id, full_name, request_type, status, served_at, feedback_rating, feedback_comment, feedback_submitted_at
-        FROM tickets WHERE id = ?
-    """, (ticket_id,))
-    row = cursor.fetchone()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, student_id, full_name, request_type, status, served_at, feedback_rating, feedback_comment, feedback_submitted_at
+            FROM tickets WHERE id = ?
+        """, (ticket_id,))
+        row = cursor.fetchone()
+    finally:
+        conn.close()
 
     if not row:
         flash("Ticket not found.", "danger")
@@ -1199,15 +1227,17 @@ def ticket_feedback(ticket_id: int):
             return render_template("feedback.html", ticket=ticket, user=session.get("user"))
 
         submitted_at = time.time()
-        conn = sqlite3.connect(DB)
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE tickets
-            SET feedback_rating = ?, feedback_comment = ?, feedback_submitted_at = ?
-            WHERE id = ? AND status = 'SERVED'
-        """, (rating, comment, submitted_at, ticket_id))
-        conn.commit()
-        conn.close()
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE tickets
+                SET feedback_rating = ?, feedback_comment = ?, feedback_submitted_at = ?
+                WHERE id = ? AND status = 'SERVED'
+            """, (rating, comment, submitted_at, ticket_id))
+            conn.commit()
+        finally:
+            conn.close()
 
         # Update local dictionary state for rendering read-only view
         ticket["feedback_rating"] = rating
@@ -1345,28 +1375,29 @@ def dashboard():
 @staff_required
 def call_ticket(ticket_id: int):
     """Calls a specific waiting ticket to the active counter window."""
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
 
-    # Concurrency check: prevent duplicate active calls
-    cursor.execute("SELECT id, full_name FROM tickets WHERE status = 'CALLED'")
-    active_called = cursor.fetchone()
-    if active_called:
-        flash(f"Counter currently has an active called ticket (#{active_called[0]} - {active_called[1]}). Please complete service or mark as skipped before calling a new student.", "warning")
+        # Concurrency check: prevent duplicate active calls
+        cursor.execute("SELECT id, full_name FROM tickets WHERE status = 'CALLED'")
+        active_called = cursor.fetchone()
+        if active_called:
+            flash(f"Counter currently has an active called ticket (#{active_called[0]} - {active_called[1]}). Please complete service or mark as skipped before calling a new student.", "warning")
+            return redirect(url_for("dashboard"))
+
+        current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
+        cursor.execute("""
+            UPDATE tickets
+            SET status = 'CALLED', called_at = ?, served_by = ?
+            WHERE id = ? AND status = 'WAITING'
+        """, (time.time(), current_user, ticket_id))
+        conn.commit()
+
+        cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
+        c_row = cursor.fetchone()
+    finally:
         conn.close()
-        return redirect(url_for("dashboard"))
-
-    current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'CALLED', called_at = ?, served_by = ?
-        WHERE id = ? AND status = 'WAITING'
-    """, (time.time(), current_user, ticket_id))
-    conn.commit()
-
-    cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
-    c_row = cursor.fetchone()
-    conn.close()
 
     if c_row:
         notifier.notify_student_called({
@@ -1385,31 +1416,34 @@ def call_ticket(ticket_id: int):
 @staff_required
 def call_next():
     """Calls the root priority ticket in Min-Heap, updating status to CALLED with called_at timestamp."""
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
 
-    # Concurrency check: prevent duplicate active calls
-    cursor.execute("SELECT id, full_name FROM tickets WHERE status = 'CALLED'")
-    active_called = cursor.fetchone()
-    if active_called:
-        flash(f"Counter currently has an active called ticket (#{active_called[0]} - {active_called[1]}). Please complete service or mark as skipped before calling a new student.", "warning")
+        # Concurrency check: prevent duplicate active calls
+        cursor.execute("SELECT id, full_name FROM tickets WHERE status = 'CALLED'")
+        active_called = cursor.fetchone()
+        if active_called:
+            flash(f"Counter currently has an active called ticket (#{active_called[0]} - {active_called[1]}). Please complete service or mark as skipped before calling a new student.", "warning")
+            return redirect(url_for("dashboard"))
+    finally:
         conn.close()
-        return redirect(url_for("dashboard"))
-    conn.close()
 
     queue = load_queue_from_db()
     top_ticket = queue.peek()
 
     if top_ticket:
         current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
-        conn = sqlite3.connect(DB)
-        conn.execute("""
-            UPDATE tickets
-            SET status = 'CALLED', called_at = ?, served_by = ?
-            WHERE id = ?
-        """, (time.time(), current_user, top_ticket.ticket_id))
-        conn.commit()
-        conn.close()
+        conn = get_db_connection()
+        try:
+            conn.execute("""
+                UPDATE tickets
+                SET status = 'CALLED', called_at = ?, served_by = ?
+                WHERE id = ?
+            """, (time.time(), current_user, top_ticket.ticket_id))
+            conn.commit()
+        finally:
+            conn.close()
 
         notifier.notify_student_called({
             "id": top_ticket.ticket_id,
@@ -1433,14 +1467,16 @@ def call_next():
 def mark_arrived(ticket_id: int):
     """Marks ticket as IN_SERVICE when student arrives at counter, stopping arrival grace timer."""
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'IN_SERVICE', arrived_at = ?
-        WHERE id = ? AND status IN ('CALLED', 'WAITING')
-    """, (time.time(), ticket_id))
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE tickets
+            SET status = 'IN_SERVICE', arrived_at = ?
+            WHERE id = ? AND status IN ('CALLED', 'WAITING')
+        """, (time.time(), ticket_id))
+        conn.commit()
+    finally:
+        conn.close()
     flash(f"Ticket #{ticket_id} status updated to IN_SERVICE (Arrival Confirmed).", "success")
     return redirect(url_for("dashboard"))
 
@@ -1452,18 +1488,20 @@ def mark_serve(ticket_id: int):
     """Marks ticket as SERVED with completion timestamp, staff ID, and optional transaction remarks."""
     remarks = request.form.get("remarks", "").strip()
     current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'SERVED', served_at = ?, served_by = ?, remarks = ?
-        WHERE id = ?
-    """, (time.time(), current_user, remarks if remarks else None, ticket_id))
-    conn.commit()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE tickets
+            SET status = 'SERVED', served_at = ?, served_by = ?, remarks = ?
+            WHERE id = ?
+        """, (time.time(), current_user, remarks if remarks else None, ticket_id))
+        conn.commit()
 
-    cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
-    v_row = cursor.fetchone()
-    conn.close()
+        cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
+        v_row = cursor.fetchone()
+    finally:
+        conn.close()
 
     if v_row:
         notifier.notify_ticket_served({
@@ -1489,18 +1527,20 @@ def mark_skip(ticket_id: int):
         skip_reason = "No-show during 5-minute call window"
 
     current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or "staff"
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'SKIPPED', skipped_at = ?, served_at = ?, served_by = ?, remarks = ?
-        WHERE id = ?
-    """, (time.time(), time.time(), current_user, skip_reason, ticket_id))
-    conn.commit()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE tickets
+            SET status = 'SKIPPED', skipped_at = ?, served_at = ?, served_by = ?, remarks = ?
+            WHERE id = ? AND status = 'CALLED'
+        """, (time.time(), time.time(), current_user, skip_reason, ticket_id))
+        conn.commit()
 
-    cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
-    k_row = cursor.fetchone()
-    conn.close()
+        cursor.execute("SELECT id, student_id, full_name, email, request_type FROM tickets WHERE id = ?", (ticket_id,))
+        k_row = cursor.fetchone()
+    finally:
+        conn.close()
 
     if k_row:
         notifier.notify_student_skipped({
@@ -1522,49 +1562,46 @@ def rejoin_ticket(ticket_id: int):
     """Re-queues a SKIPPED ticket back into WAITING state with a +2.0 priority penalty offset if within 15 mins."""
     check_and_expire_skipped_tickets()
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, status, skipped_at, rejoin_used, penalty_offset
-        FROM tickets WHERE id = ?
-    """, (ticket_id,))
-    row = cursor.fetchone()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, user_id, student_id, full_name, email, request_type, request_weight, grade_level, level_weight, arrival_timestamp, status, skipped_at, rejoin_used, penalty_offset
+            FROM tickets WHERE id = ?
+        """, (ticket_id,))
+        row = cursor.fetchone()
 
-    if not row:
-        conn.close()
-        flash("Ticket not found.", "danger")
-        return redirect(url_for("student_dashboard"))
+        if not row:
+            return redirect(url_for("student_dashboard"))
 
-    t_id, user_id, std_id, name, email, req_type, req_w, lvl_name, lvl_w, arr_ts, status, skipped_at, rejoin_used, current_penalty = row
+        t_id, user_id, std_id, name, email, req_type, req_w, lvl_name, lvl_w, arr_ts, status, skipped_at, rejoin_used, current_penalty = row
 
-    if status != "SKIPPED":
-        conn.close()
-        flash("Only SKIPPED tickets within the 15-minute grace window can re-join the queue.", "danger")
-        return redirect(url_for("ticket_status", ticket_id=ticket_id))
+        if status != "SKIPPED":
+            flash("Only SKIPPED tickets within the 15-minute grace window can re-join the queue.", "danger")
+            return redirect(url_for("ticket_status", ticket_id=ticket_id))
 
-    if rejoin_used:
-        conn.close()
-        flash("Re-join allowance has already been used for this ticket. Please submit a new ticket.", "danger")
-        return redirect(url_for("ticket_status", ticket_id=ticket_id))
+        if rejoin_used:
+            flash("Re-join allowance has already been used for this ticket. Please submit a new ticket.", "danger")
+            return redirect(url_for("ticket_status", ticket_id=ticket_id))
 
-    if skipped_at and (time.time() - skipped_at > 900):
-        cursor.execute("UPDATE tickets SET status = 'CANCELLED', remarks = '15-minute re-join window expired' WHERE id = ?", (ticket_id,))
+        if skipped_at and (time.time() - skipped_at > 900):
+            cursor.execute("UPDATE tickets SET status = 'CANCELLED', remarks = '15-minute re-join window expired' WHERE id = ?", (ticket_id,))
+            conn.commit()
+            flash("The 15-minute re-join window has expired. Ticket has been cancelled.", "danger")
+            return redirect(url_for("ticket_status", ticket_id=ticket_id))
+
+        # Apply 1-chance penalty (+2.0 offset)
+        new_penalty = (current_penalty or 0.0) + 2.0
+        new_score = strategy.calculate_score(req_w, lvl_w, arr_ts, penalty_offset=new_penalty)
+
+        cursor.execute("""
+            UPDATE tickets
+            SET status = 'WAITING', rejoin_used = 1, penalty_offset = ?, priority_score = ?, remarks = 'Re-joined queue with +2.0 priority penalty'
+            WHERE id = ?
+        """, (new_penalty, new_score, ticket_id))
         conn.commit()
+    finally:
         conn.close()
-        flash("The 15-minute re-join window has expired. Ticket has been cancelled.", "danger")
-        return redirect(url_for("ticket_status", ticket_id=ticket_id))
-
-    # Apply 1-chance penalty (+2.0 offset)
-    new_penalty = (current_penalty or 0.0) + 2.0
-    new_score = strategy.calculate_score(req_w, lvl_w, arr_ts, penalty_offset=new_penalty)
-
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'WAITING', rejoin_used = 1, penalty_offset = ?, priority_score = ?, remarks = 'Re-joined queue with +2.0 priority penalty'
-        WHERE id = ?
-    """, (new_penalty, new_score, ticket_id))
-    conn.commit()
-    conn.close()
 
     # Re-heapify in memory
     load_queue_from_db()
@@ -1585,15 +1622,17 @@ def void_ticket(ticket_id: int):
     current_user = session.get("user", {}).get("email") or session.get("user", {}).get("username") or session.get("user", {}).get("full_name") or "staff"
     full_remarks = f"Voided: {void_reason} (by {current_user})"
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'CANCELLED', remarks = ?
-        WHERE id = ?
-    """, (full_remarks, ticket_id))
-    conn.commit()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE tickets
+            SET status = 'CANCELLED', remarks = ?
+            WHERE id = ?
+        """, (full_remarks, ticket_id))
+        conn.commit()
+    finally:
+        conn.close()
 
     # Immediately refresh in-memory Min-Heap queue
     load_queue_from_db()
@@ -1608,11 +1647,13 @@ def void_ticket(ticket_id: int):
 @admin_required
 def delete_ticket(ticket_id: int):
     """Permanently deletes a ticket from the SQLite database (Admin only)."""
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
-    conn.commit()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
+        conn.commit()
+    finally:
+        conn.close()
 
     # Immediately refresh in-memory Min-Heap queue
     load_queue_from_db()
@@ -1668,77 +1709,78 @@ def admin_users():
         if not email or not password or not full_name:
             flash("Please fill in all required fields.", "danger")
         else:
-            conn = sqlite3.connect(DB)
-            cursor = conn.cursor()
+            conn = get_db_connection()
+            try:
+                cursor = conn.cursor()
 
-            if role == "student":
-                cursor.execute("SELECT id FROM students WHERE lower(email) = lower(?) OR (student_id != '' AND lower(student_id) = lower(?))", (email, student_id))
-                d1 = cursor.fetchone()
-                cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
-                d2 = cursor.fetchone()
+                if role == "student":
+                    cursor.execute("SELECT id FROM students WHERE lower(email) = lower(?) OR (student_id != '' AND lower(student_id) = lower(?))", (email, student_id))
+                    d1 = cursor.fetchone()
+                    cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
+                    d2 = cursor.fetchone()
 
-                if d1 or d2:
-                    flash(f"Student or Account with Email '{email}' or ID '{student_id}' already exists.", "danger")
-                    conn.close()
+                    if d1 or d2:
+                        flash(f"Student or Account with Email '{email}' or ID '{student_id}' already exists.", "danger")
+                    else:
+                        v_token = secrets.token_urlsafe(32)
+                        pass_hash = generate_password_hash(password)
+                        cursor.execute("""
+                            INSERT INTO students (student_id, email, password_hash, full_name, program_dept, avatar_url, email_verified, verification_token, created_at)
+                            VALUES (?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
+                        """, (student_id, email, pass_hash, full_name, program_dept, v_token, time.time()))
+                        conn.commit()
+
+                        notifier.send_welcome_account_notice(
+                            to_email=email,
+                            full_name=full_name,
+                            account_id=student_id,
+                            default_password=password,
+                            verification_token=v_token,
+                            role="student"
+                        )
+
+                        flash(f"Student account '{full_name}' ({email}) successfully created. Verification email dispatched with account details.", "success")
+                        return redirect(url_for("admin_users"))
                 else:
-                    v_token = secrets.token_urlsafe(32)
-                    pass_hash = generate_password_hash(password)
-                    cursor.execute("""
-                        INSERT INTO students (student_id, email, password_hash, full_name, program_dept, avatar_url, email_verified, verification_token, created_at)
-                        VALUES (?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
-                    """, (student_id, email, pass_hash, full_name, program_dept, v_token, time.time()))
-                    conn.commit()
-                    conn.close()
+                    cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
+                    d1 = cursor.fetchone()
+                    cursor.execute("SELECT id FROM students WHERE lower(email) = lower(?) OR (student_id != '' AND lower(student_id) = lower(?))", (email, student_id))
+                    d2 = cursor.fetchone()
 
-                    notifier.send_welcome_account_notice(
-                        to_email=email,
-                        full_name=full_name,
-                        account_id=student_id,
-                        default_password=password,
-                        verification_token=v_token,
-                        role="student"
-                    )
+                    if d1 or d2:
+                        flash(f"Staff account with Email '{email}' or Employee ID '{student_id}' already exists.", "danger")
+                    else:
+                        v_token = secrets.token_urlsafe(32)
+                        pass_hash = generate_password_hash(password)
+                        cursor.execute("""
+                            INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, email_verified, verification_token, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
+                        """, (student_id, email, pass_hash, full_name, role, program_dept, v_token, time.time()))
+                        conn.commit()
 
-                    flash(f"Student account '{full_name}' ({email}) successfully created. Verification email dispatched with account details.", "success")
-                    return redirect(url_for("admin_users"))
-            else:
-                cursor.execute("SELECT id FROM staff_users WHERE lower(email) = lower(?) OR (employee_id != '' AND lower(employee_id) = lower(?))", (email, student_id))
-                d1 = cursor.fetchone()
-                cursor.execute("SELECT id FROM students WHERE lower(email) = lower(?) OR (student_id != '' AND lower(student_id) = lower(?))", (email, student_id))
-                d2 = cursor.fetchone()
+                        notifier.send_welcome_account_notice(
+                            to_email=email,
+                            full_name=full_name,
+                            account_id=student_id,
+                            default_password=password,
+                            verification_token=v_token,
+                            role=role
+                        )
 
-                if d1 or d2:
-                    flash(f"Staff account with Email '{email}' or Employee ID '{student_id}' already exists.", "danger")
-                    conn.close()
-                else:
-                    v_token = secrets.token_urlsafe(32)
-                    pass_hash = generate_password_hash(password)
-                    cursor.execute("""
-                        INSERT INTO staff_users (employee_id, email, password_hash, full_name, role, program_dept, avatar_url, email_verified, verification_token, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, '/static/uploads/avatars/default.png', 0, ?, ?)
-                    """, (student_id, email, pass_hash, full_name, role, program_dept, v_token, time.time()))
-                    conn.commit()
-                    conn.close()
+                        flash(f"Staff/Admin account '{full_name}' ({email}) successfully created as {role.upper()}. Verification email dispatched with account details.", "success")
+                        return redirect(url_for("admin_users"))
+            finally:
+                conn.close()
 
-                    notifier.send_welcome_account_notice(
-                        to_email=email,
-                        full_name=full_name,
-                        account_id=student_id,
-                        default_password=password,
-                        verification_token=v_token,
-                        role=role
-                    )
-
-                    flash(f"Staff/Admin account '{full_name}' ({email}) successfully created as {role.upper()}. Verification email dispatched with account details.", "success")
-                    return redirect(url_for("admin_users"))
-
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, employee_id, email, full_name, role, program_dept, created_at, COALESCE(email_verified, 1) FROM staff_users ORDER BY created_at DESC")
-    staff_list = cursor.fetchall()
-    cursor.execute("SELECT id, student_id, email, full_name, program_dept, created_at, COALESCE(email_verified, 0) FROM students ORDER BY created_at DESC")
-    student_list = cursor.fetchall()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, employee_id, email, full_name, role, program_dept, created_at, COALESCE(email_verified, 1) FROM staff_users ORDER BY created_at DESC")
+        staff_list = cursor.fetchall()
+        cursor.execute("SELECT id, student_id, email, full_name, program_dept, created_at, COALESCE(email_verified, 0) FROM students ORDER BY created_at DESC")
+        student_list = cursor.fetchall()
+    finally:
+        conn.close()
 
     return render_template("admin_users.html", staff_users=staff_list, students=student_list, user=session.get("user"))
 
@@ -1755,35 +1797,33 @@ def admin_delete_user():
         flash("Deletion canceled. You must type 'DELETE' in the confirmation box to remove an account.", "danger")
         return redirect(url_for("admin_users"))
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
 
-    if target_type == "staff_user":
-        if user_id == session.get("user", {}).get("id"):
-            flash("Operation denied: You cannot delete your own active administrator account.", "danger")
-            conn.close()
-            return redirect(url_for("admin_users"))
+        if target_type == "staff_user":
+            if user_id == session.get("user", {}).get("id"):
+                flash("Operation denied: You cannot delete your own active administrator account.", "danger")
+                return redirect(url_for("admin_users"))
 
-        cursor.execute("DELETE FROM staff_users WHERE id = ?", (user_id,))
-        conn.commit()
+            cursor.execute("DELETE FROM staff_users WHERE id = ?", (user_id,))
+            conn.commit()
+            flash(f"Staff/Admin account #{user_id} has been permanently deleted.", "warning")
+
+        elif target_type == "student":
+            cursor.execute("DELETE FROM students WHERE id = ?", (user_id,))
+            conn.commit()
+            flash(f"Student account #{user_id} has been permanently deleted.", "warning")
+
+        elif target_type == "all_students":
+            cursor.execute("DELETE FROM students")
+            conn.commit()
+            flash("All student accounts have been permanently purged from the database.", "danger")
+
+        else:
+            flash("Invalid target account type.", "danger")
+    finally:
         conn.close()
-        flash(f"Staff/Admin account #{user_id} has been permanently deleted.", "warning")
-
-    elif target_type == "student":
-        cursor.execute("DELETE FROM students WHERE id = ?", (user_id,))
-        conn.commit()
-        conn.close()
-        flash(f"Student account #{user_id} has been permanently deleted.", "warning")
-
-    elif target_type == "all_students":
-        cursor.execute("DELETE FROM students")
-        conn.commit()
-        conn.close()
-        flash("All student accounts have been permanently purged from the database.", "danger")
-
-    else:
-        conn.close()
-        flash("Invalid target account type.", "danger")
 
     return redirect(url_for("admin_users"))
 
@@ -1801,43 +1841,44 @@ def admin_reset_password(user_id: int = None):
         flash("User ID is required.", "danger")
         return redirect(url_for("admin_users"))
 
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
 
-    user_row = None
-    table_name = None
+        user_row = None
+        table_name = None
 
-    if target_type == "staff_user":
-        cursor.execute("SELECT id, email, full_name FROM staff_users WHERE id = ?", (user_id,))
-        user_row = cursor.fetchone()
-        table_name = "staff_users"
-    elif target_type == "student":
-        cursor.execute("SELECT id, email, full_name FROM students WHERE id = ?", (user_id,))
-        user_row = cursor.fetchone()
-        table_name = "students"
-    else:
-        cursor.execute("SELECT id, email, full_name FROM staff_users WHERE id = ?", (user_id,))
-        user_row = cursor.fetchone()
-        if user_row:
+        if target_type == "staff_user":
+            cursor.execute("SELECT id, email, full_name FROM staff_users WHERE id = ?", (user_id,))
+            user_row = cursor.fetchone()
             table_name = "staff_users"
-        else:
+        elif target_type == "student":
             cursor.execute("SELECT id, email, full_name FROM students WHERE id = ?", (user_id,))
             user_row = cursor.fetchone()
+            table_name = "students"
+        else:
+            cursor.execute("SELECT id, email, full_name FROM staff_users WHERE id = ?", (user_id,))
+            user_row = cursor.fetchone()
             if user_row:
-                table_name = "students"
+                table_name = "staff_users"
+            else:
+                cursor.execute("SELECT id, email, full_name FROM students WHERE id = ?", (user_id,))
+                user_row = cursor.fetchone()
+                if user_row:
+                    table_name = "students"
 
-    if not user_row:
+        if not user_row:
+            flash("Account not found.", "danger")
+            return redirect(url_for("admin_users"))
+
+        u_id, email, full_name = user_row
+        temp_pass = generate_temp_password()
+        pass_hash = generate_password_hash(temp_pass)
+
+        cursor.execute(f"UPDATE {table_name} SET password_hash = ?, must_change_password = 1 WHERE id = ?", (pass_hash, u_id))
+        conn.commit()
+    finally:
         conn.close()
-        flash("Account not found.", "danger")
-        return redirect(url_for("admin_users"))
-
-    u_id, email, full_name = user_row
-    temp_pass = generate_temp_password()
-    pass_hash = generate_password_hash(temp_pass)
-
-    cursor.execute(f"UPDATE {table_name} SET password_hash = ?, must_change_password = 1 WHERE id = ?", (pass_hash, u_id))
-    conn.commit()
-    conn.close()
 
     email_sent = notifier.send_password_reset_notice(email, full_name, temp_pass)
 
@@ -1854,16 +1895,18 @@ def admin_reset_password(user_id: int = None):
 def admin_reset_queue():
     """Admin-only route to reset active queue tickets or purge ticket history."""
     scope = request.form.get("scope", "waiting")
-    conn = sqlite3.connect(DB)
-    cursor = conn.cursor()
-    if scope == "waiting":
-        cursor.execute("DELETE FROM tickets WHERE status = 'WAITING' OR status = 'CALLED'")
-        flash("All active waiting and called queue tickets have been reset.", "warning")
-    else:
-        cursor.execute("DELETE FROM tickets")
-        flash("The entire queue database and servicing history have been purged.", "danger")
-    conn.commit()
-    conn.close()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        if scope == "waiting":
+            cursor.execute("DELETE FROM tickets WHERE status = 'WAITING' OR status = 'CALLED'")
+            flash("All active waiting and called queue tickets have been reset.", "warning")
+        else:
+            cursor.execute("DELETE FROM tickets")
+            flash("The entire queue database and servicing history have been purged.", "danger")
+        conn.commit()
+    finally:
+        conn.close()
     return redirect(url_for("dashboard"))
 
 
