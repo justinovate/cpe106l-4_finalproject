@@ -17,30 +17,58 @@
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-mapua-cardinal shadow-sm mb-4">
     <div class="container">
-        <a class="navbar-brand fw-bold d-flex align-items-center" href="/dashboard">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="{% if user and user.role in ('staff', 'admin') %}/dashboard{% else %}/student/portal{% endif %}">
             <img src="/static/images/logo_icon_white.svg" alt="MapúaQ Logo" style="height: 32px;" class="me-2">
             <span>MapúaQ</span>
-            <span class="badge bg-warning text-dark fs-6 ms-2">Registrar Employee Portal</span>
+            {% if user and user.role == 'admin' %}
+                <span class="badge bg-warning text-dark fs-6 ms-2">Admin Portal</span>
+            {% elif user and user.role == 'staff' %}
+                <span class="badge bg-warning text-dark fs-6 ms-2">Staff Portal</span>
+            {% elif user and user.role == 'student' %}
+                <span class="badge bg-warning text-dark fs-6 ms-2">Student Portal</span>
+            {% else %}
+                <span class="badge bg-warning text-dark fs-6 ms-2">Priority Queuing</span>
+            {% endif %}
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <div class="navbar-nav me-auto">
-                <a class="nav-link active fw-bold" href="/dashboard">Queue Monitor</a>
-                <a class="nav-link fw-bold" href="/analytics">Analytics</a>
-                {% if user and user.role == 'admin' %}
-                <a class="nav-link fw-bold text-warning" href="/admin/users">Manage Staff Accounts</a>
+                {% if user %}
+                    {% if user.role == 'admin' %}
+                        <a class="nav-link active fw-bold" href="/dashboard">Dashboard</a>
+                        <a class="nav-link fw-bold" href="/admin/users">User Management</a>
+                        <a class="nav-link fw-bold" href="/analytics">Analytics</a>
+                        <a class="nav-link fw-bold" href="/checkin">Kiosk View</a>
+                    {% elif user.role == 'staff' %}
+                        <a class="nav-link active fw-bold" href="/dashboard">Dashboard</a>
+                        <a class="nav-link fw-bold" href="/analytics">Analytics</a>
+                    {% else %}
+                        <a class="nav-link fw-bold" href="/student/portal">Student Home</a>
+                        <a class="nav-link fw-bold" href="/checkin">Issue New Ticket</a>
+                        <a class="nav-link fw-bold" href="/profile">My Profile</a>
+                    {% endif %}
+                {% else %}
+                    <a class="nav-link fw-bold" href="/login">Login</a>
+                    <a class="nav-link fw-bold" href="/register">Register</a>
                 {% endif %}
-                <a class="nav-link fw-bold" href="/profile">My Profile</a>
             </div>
             <div class="navbar-nav align-items-center">
-                <span class="navbar-text text-light me-3 d-flex align-items-center">
-                    <img src="{{ user.avatar_url or '/static/uploads/avatars/default.png' }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white">
-                    <strong>{{ user.full_name }}</strong>
-                    <span class="badge bg-light text-dark text-capitalize ms-2">{{ user.role }}</span>
-                </span>
-                <a href="/logout" class="btn btn-outline-light btn-sm fw-bold">Logout</a>
+                {% if user %}
+                    <span class="navbar-text text-light me-3 d-flex align-items-center">
+                        <img src="{{ user.avatar_url or '/static/uploads/avatars/default.png' }}" alt="Avatar" class="rounded-circle avatar-sm me-2 bg-white" style="width: 32px; height: 32px; object-fit: cover;">
+                        <strong>{{ user.full_name }}</strong>
+                        {% if user.role == 'admin' %}
+                            <span class="badge bg-danger text-uppercase ms-2">ADMIN</span>
+                        {% elif user.role == 'staff' %}
+                            <span class="badge bg-primary text-uppercase ms-2">STAFF</span>
+                        {% endif %}
+                    </span>
+                    <a href="/logout" class="btn btn-outline-light btn-sm fw-bold">Logout</a>
+                {% else %}
+                    <a href="/login" class="btn btn-outline-light btn-sm fw-bold">Login</a>
+                {% endif %}
             </div>
         </div>
     </div>

@@ -325,6 +325,7 @@ def index():
 
 @app.route("/student")
 @app.route("/student/dashboard")
+@app.route("/student/portal")
 @login_required
 def student_dashboard():
     """Student Portal Home Page — Displays welcome banner, quick actions (Request Ticket, Edit Profile), and active/past ticket history."""
