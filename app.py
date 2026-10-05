@@ -113,14 +113,41 @@ def init_db():
 
 def seed_default_users(conn):
     cur = conn.cursor()
-    cur.execute("SELECT id FROM users WHERE email = ?", ('staff@mapua.edu.ph',))
+    
+    # 1. Registrar Staff Account (registrar@mapua.edu.ph / StaffPass2026!)
+    cur.execute("SELECT id FROM users WHERE email = ?", ('registrar@mapua.edu.ph',))
     if not cur.fetchone():
-        pass_hash = generate_password_hash('staff123')
         cur.execute(
             "INSERT INTO users (student_id, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
-            ('STAFF-001', 'Registrar Staff', 'staff@mapua.edu.ph', pass_hash, 'STAFF')
+            ('EMP-001', 'Registrar Staff', 'registrar@mapua.edu.ph', generate_password_hash('StaffPass2026!'), 'STAFF')
         )
-        conn.commit()
+
+    # 2. System Admin Account (admin@mapua.edu.ph / AdminPass2026!)
+    cur.execute("SELECT id FROM users WHERE email = ?", ('admin@mapua.edu.ph',))
+    if not cur.fetchone():
+        cur.execute(
+            "INSERT INTO users (student_id, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
+            ('ADM-001', 'System Administrator', 'admin@mapua.edu.ph', generate_password_hash('AdminPass2026!'), 'ADMIN')
+        )
+
+    # 3. Demo Student Account (student@mymail.mapua.edu.ph / StudentPass123!)
+    cur.execute("SELECT id FROM users WHERE email = ?", ('student@mymail.mapua.edu.ph',))
+    if not cur.fetchone():
+        cur.execute(
+            "INSERT INTO users (student_id, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
+            ('2026100001', 'Demo Student', 'student@mymail.mapua.edu.ph', generate_password_hash('StudentPass123!'), 'STUDENT')
+        )
+
+    # 4. Secondary Staff Account (staff@mapua.edu.ph / staff123)
+    cur.execute("SELECT id FROM users WHERE email = ?", ('staff@mapua.edu.ph',))
+    if not cur.fetchone():
+        cur.execute(
+            "INSERT INTO users (student_id, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
+            ('STAFF-001', 'Registrar Staff (Alt)', 'staff@mapua.edu.ph', generate_password_hash('staff123'), 'STAFF')
+        )
+
+    conn.commit()
+
 
 
 def login_required(f):
