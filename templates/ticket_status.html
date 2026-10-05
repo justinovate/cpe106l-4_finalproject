@@ -103,18 +103,18 @@
     {% endwith %}
 
     <!-- ON-DECK ALERT CARD -->
-    {% if is_on_deck and ticket.status == 'WAITING' %}
-        <div class="alert alert-info border-info text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
-            <h3 class="fw-bold mb-1 text-info-emphasis">YOU ARE ON-DECK</h3>
-            <p class="mb-2 fs-5 fw-semibold text-dark">You are next in line (Rank #1). Please prepare to approach Counter 1 as soon as the current student finishes.</p>
-            <span class="badge bg-info text-dark fs-6 px-3 py-2">Prepare your Mapúa Student ID &amp; Documents</span>
+    {% if (is_on_deck or notify_prepare) and ticket.status == 'WAITING' %}
+        <div class="alert alert-warning border-warning text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
+            <h3 class="fw-bold mb-1 text-dark">YOU ARE ON-DECK</h3>
+            <p class="mb-2 fs-5 fw-semibold text-dark">Notice: The student ahead of you has arrived and is currently being served at Counter 1. Please proceed to the registrar lobby and prepare your necessary documents.</p>
+            <span class="badge bg-warning text-dark fs-6 px-3 py-2 border border-dark">Prepare your Mapúa Student ID &amp; Documents</span>
         </div>
     {% endif %}
 
     <!-- IN_SERVICE ALERT BANNER -->
     {% if ticket.status == 'IN_SERVICE' %}
         <div class="alert alert-primary border-primary text-center p-4 mb-4 shadow rounded-3" role="alert">
-            <h3 class="fw-bold mb-1">CURRENTLY IN SERVICE AT COUNTER 1</h3>
+            <h3 class="fw-bold mb-1">NOW SERVING AT COUNTER 1 — Transaction In Progress</h3>
             <p class="mb-0 fs-5 fw-semibold text-dark">Your transaction is currently being processed by the registrar officer.</p>
         </div>
     {% endif %}
@@ -122,7 +122,7 @@
     <!-- CALLED ALERT BANNER & 5-MIN GRACE TIMER -->
     {% if ticket.status == 'CALLED' %}
         <div class="alert alert-success border-success text-center p-4 mb-4 shadow pulse-banner rounded-3" role="alert">
-            <h2 class="fw-bold mb-1">YOUR TICKET IS BEING CALLED AT COUNTER 1</h2>
+            <h2 class="fw-bold mb-1">PLEASE REPORT TO COUNTER 1</h2>
             <p class="mb-3 fs-5 fw-semibold text-dark">Please proceed immediately to the counter window with your valid Mapúa ID.</p>
 
             <div class="bg-white p-3 rounded border border-success d-inline-block shadow-sm px-4">
@@ -226,8 +226,13 @@
                     </div>
                 {% elif ticket.status == 'CALLED' %}
                     <div class="p-3 bg-success text-white rounded-3 mb-3">
-                        <h3 class="fw-bold mb-1">BEING CALLED</h3>
+                        <h3 class="fw-bold mb-1">PLEASE REPORT TO COUNTER 1</h3>
                         <p class="mb-0">Registrar staff are ready to assist you at Counter Window 1.</p>
+                    </div>
+                {% elif ticket.status == 'IN_SERVICE' %}
+                    <div class="p-3 bg-primary text-white rounded-3 mb-3">
+                        <h3 class="fw-bold mb-1">NOW SERVING AT COUNTER 1 — Transaction In Progress</h3>
+                        <p class="mb-0">Your transaction is currently being processed by the registrar officer.</p>
                     </div>
                 {% elif ticket.status == 'SERVED' %}
                     <div class="p-3 bg-success bg-opacity-10 border border-success rounded-3 mb-3">
@@ -275,6 +280,24 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    const ticketId = Number("{{ ticket.id }}");
+    const currentStatus = "{{ ticket.status }}";
+    const currentOnDeck = "{{ is_on_deck or notify_prepare or False }}" === "True";
+
+    // Fast JSON API Polling for Real-Time Status Updates
+    function pollStatus() {
+        fetch("/api/ticket/" + ticketId + "/status")
+            .then(res => res.json())
+            .then(data => {
+                if (data && !data.error) {
+                    if (data.status !== currentStatus || Boolean(data.is_on_deck) !== currentOnDeck) {
+                        window.location.reload();
+                    }
+                }
+            })
+            .catch(err => console.error("Polling error:", err));
+    }
+    setInterval(pollStatus, 3000);
     // 5-Minute Call Grace Countdown Timer (for CALLED tickets)
     const calledAt = Number("{{ ticket.called_at or 0 }}");
     const callTimerEl = document.getElementById("callTimer");

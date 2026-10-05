@@ -969,7 +969,7 @@ def ticket_status(ticket_id: int):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, served_at, served_by, feedback_rating, feedback_comment, called_at, skipped_at, rejoin_used, penalty_offset, remarks
+            SELECT id, student_id, full_name, request_type, arrival_timestamp, status, served_at, served_by, feedback_rating, feedback_comment, called_at, skipped_at, rejoin_used, penalty_offset, remarks, arrived_at
             FROM tickets WHERE id = ?
         """, (ticket_id,))
         row = cursor.fetchone()
@@ -995,7 +995,8 @@ def ticket_status(ticket_id: int):
         "skipped_at": row[11],
         "rejoin_used": row[12] or 0,
         "penalty_offset": row[13] or 0.0,
-        "remarks": row[14]
+        "remarks": row[14],
+        "arrived_at": row[15]
     }
 
     students_ahead = 0
@@ -1025,6 +1026,7 @@ def ticket_status(ticket_id: int):
         students_ahead=students_ahead,
         estimated_wait_mins=estimated_wait_mins,
         is_on_deck=is_on_deck,
+        notify_prepare=is_on_deck,
         user=session.get("user")
     )
 
@@ -1071,6 +1073,7 @@ def api_ticket_status(ticket_id: int):
         "students_ahead": students_ahead,
         "estimated_wait_mins": estimated_wait_mins,
         "is_on_deck": is_on_deck,
+        "notify_prepare": is_on_deck,
         "called_at": row[6],
         "arrived_at": row[7],
         "served_at": row[8]
